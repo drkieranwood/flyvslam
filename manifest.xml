@@ -1,0 +1,22 @@
+<package>
+  <description brief="flyvslam">
+
+     flyvslam
+
+  </description>
+  <author>Kieran</author>
+  <license>BSD</license>
+  <review status="unreviewed" notes=""/>
+  <url>http://ros.org/wiki/flyvslam</url>
+  <depend package="roslib"/>
+  <depend package="roscpp"/>
+  <depend package="std_msgs"/>
+  <depend package="vicon_bridge"/>
+  <depend package="ptam"/>
+  <depend package="ptam_com"/>
+  <depend package="drone_teleop"/>
+  <depend package="ardrone_autonomy"/>
+
+</package>
+
+

@@ -1,0 +1,11 @@
+#This is the waypoints file
+#The order is pos(x y z) look(x y z) time
+#--pos(xyz) is the position the MAV should be
+#--look(xyz) is the point the MAV should look at
+#--time is the time it should take to get to the next waypoint
+#--ideally always start with zeros and spaces are allowed
+0.0 0.0 0.0        100.0 0.0 0.0         5.0
+0.0 0.0 -1.0       100.0 0.0 0.0         10.0
+1.0 0.0 -1.0       100.0 0.0 0.0         10.0
+0.0 0.0 -1.0       100.0 0.0 0.0         10.0
+0.0 0.0 0.0        100.0 0.0 0.0         5.0
