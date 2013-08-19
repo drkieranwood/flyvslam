@@ -13,7 +13,7 @@ namespace krot
 	//Convert quaternion into a direction-cosine-matrix (DCM).
 	//Quaternion in [w,x,y,z]' order with unit magnitude.
 	//DCM is 3 by 3 and special orthogonal.
-	inline TooN::Matrix<3,3,double> r_q_to_dcm(TooN::Vector<4,double> temp)
+	static TooN::Matrix<3,3,double> r_q_to_dcm(TooN::Vector<4,double> temp)
 	{
 		//Check the quaternion is valid.
 		krot::r_check_q(temp);

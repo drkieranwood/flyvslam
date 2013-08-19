@@ -41,8 +41,8 @@ int main(int argc, char **argv)
 	//Vector to hold the latest output to the MAV
 	TooN::Vector<3, double> current_cmd_vel = TooN::makeVector(0,0,0);
 
-	//Maximum number of times to repeat the waypoints
-	int maxWaypointLoops = 1;
+	//Maximum number of times to repeat the waypoints. Put this value high for long flights.
+	int maxWaypointLoops = 10;
 
 	//Get the waypoints from file, and set the start time.
 	waypoint_data waypoint_info;
@@ -66,6 +66,9 @@ int main(int argc, char **argv)
 
 	//Setup subscriber to get the PTAM pose information
 	ros::Subscriber sub_ptam_pose = n.subscribe("/vslam/pose", 1, &ptam_data::update,&ptam_info);
+	
+	//Debug
+	//ros::Publisher  pub_debug = n.advertise<geometry_msgs::Twist>("/debugout", 1);
 
 	//=========================
 
@@ -92,12 +95,22 @@ int main(int argc, char **argv)
 		//Update the the current position reference input and yaw
 		TooN::Vector<3, double> referencePos = waypoint_info.getTargetPos(ros::Time::now());
 		double referenceYaw = waypoint_info.getTargetYaw();
-
-
 	
 		//Update the current position and yaw from Vicon
 		TooN::Vector<3, double> currentPos = vicon_info.currentPos;
 		double currentYaw = vicon_info.currentYaw;
+		
+		/*
+		std::cout << std::setw(6) << (180/3.14159)*vicon_info.currentEuler[0] << " " << (180/3.14159)*vicon_info.currentEuler[1] << " " << (180/3.14159)*vicon_info.currentEuler[2] << std::endl;
+		geometry_msgs::Twist debugout;
+		debugout.linear.x = vicon_info.currentPos[0];
+		debugout.linear.y = vicon_info.currentPos[1];
+		debugout.linear.z = vicon_info.currentPos[2];
+		debugout.angular.x = vicon_info.currentEuler[0];
+		debugout.angular.y = vicon_info.currentEuler[1];
+		debugout.angular.z = vicon_info.currentEuler[2];
+		pub_debug.publish(debugout);
+		*/
 		
 		/****************************************
 		//At this point in the loop we have the current position and yaw of the MAV expressed in the NED reference 
@@ -169,6 +182,8 @@ int main(int argc, char **argv)
 		}
 		
 		//Check for new ros messages
+		ros::spinOnce();
+		rateLimiter.sleep();
 		ros::spinOnce();
 	} 
 

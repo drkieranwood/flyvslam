@@ -13,7 +13,7 @@ namespace krot
 {
 	//Check the Euler triplet is valid.
 	//Phi and Psi are wrapped into the range (-pi:pi], Theta is wrapped into the range (-pi/2:pi/2]
-	inline void r_check_e(TooN::Vector<3,double> &temp)
+	static void r_check_e(TooN::Vector<3,double> &temp)
 	{
 		//Check quaternion has 4 elements
 		if (temp.size() != 3)
@@ -21,7 +21,7 @@ namespace krot
 
 		//Wrap the angles to the range (-pi:pi]
 		for(int aa=0 ; aa<3 ; aa++) {
-			if ( temp[aa] >= 0 ) {
+			if ( temp[aa] >= 0.0 ) {
 				//Remove superflous complete rotations
 				temp[aa] = fmod( temp[aa] , (2*PI));
 				if ( temp[aa] > PI ) {

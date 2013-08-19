@@ -3,6 +3,7 @@
 
 //Cross-referenced rotation library functions
 #include <r_load_tol.h>
+#include <r_check_q.h>
 #include <TooN/TooN.h>
 
 
@@ -11,7 +12,7 @@
 namespace krot
 {
 	//Check the quaternion is valid (i.e. unit magnitude)
-	inline void r_check_q(TooN::Vector<4,double> &temp)
+	static void r_check_q(TooN::Vector<4,double> &temp)
 	{
 		//Check quaternion has 4 elements
 		if (temp.size() != 4)
