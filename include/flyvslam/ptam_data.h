@@ -15,6 +15,38 @@ class ptam_data
 
 		//Update the PTAM info with a new ptam frame.
 		void update(const geometry_msgs::PoseWithCovarianceStampedConstPtr& msg);
+
+		//Set the Vicon position when PTAM initialized
+		void setInitVicon(TooN::Vector<3, double> initPos,TooN::Vector<4, double> initRot);
+
+		//Set the PTAM scale
+		void setPtamScale(double scaleTemp);
+
+
+		//Storage for the initial PTAM pose
+		TooN::Vector<3, double> initPtamPos;
+		TooN::Vector<4, double> initPtamRot;
+		TooN::Vector<3, double> initPtamPosInv;
+		TooN::Vector<4, double> initPtamRotInv;
+		int setPtamInit;
+		int setPtamInitInv;
+
+		//Storage for the initial Vicon pose when PTAM inits
+		TooN::Vector<3, double> initViconPos;
+		TooN::Vector<4, double> initViconRot;
+		TooN::Vector<4, double> initViconRotInv;
+		int setViconInit;
+
+		//Current pose info. This is the latest measurement transformed into NED
+		TooN::Vector<3, double> currentPos;
+		TooN::Vector<4, double>	currentRot;
+		TooN::Vector<3, double> currentEuler;
+		double currentYaw;
+
+		//Scale
+		double ptamScale;
+
+
 };
 #endif
 //eof

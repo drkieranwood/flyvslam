@@ -80,12 +80,15 @@ bool waypoint_data::readWaypointData()
 	if (myfile.is_open())
 	{
 		ROS_INFO("File opened...");
-		//Read waypoint info from file into tmp waypoints until end of file. Ignore lines starting with a #.
+		//Read waypoint info from file into tmp waypoints until end of file. Ignore lines starting with a # or $ .
 		while (myfile.good())
-		{
-			
+		{			
 			getline (myfile,line);
-			if((line!="")&&(line.find("#")!=0))
+			if (line.find("$")==0)   			        //if a special commmand line starts with a $
+			{
+
+			}
+			else if((line!="")&&(line.find("#")!=0))		//else if not a comment (starts with a #) or blank
 			{
 				if(myfile.good())
 				{

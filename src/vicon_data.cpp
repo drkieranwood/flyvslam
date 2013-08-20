@@ -7,7 +7,7 @@ vicon_data::vicon_data()
 	viconCount=3;
 	currentVel=TooN::makeVector(0,0,0);
 	currentPos=TooN::makeVector(0,0,0);
-	currentRot=TooN::makeVector(0,0,0,0);
+	currentRot=TooN::makeVector(1,0,0,0);
 
 	currentEuler=TooN::makeVector(0,0,0);
 
@@ -52,6 +52,7 @@ void vicon_data::update(const geometry_msgs::TransformStamped::ConstPtr& msg)
 	currentPos      = received_vicon_pos;
 	vicon_time.sec  = msg->header.stamp.sec; 
 	vicon_time.nsec = msg->header.stamp.nsec;
+	currentRot = received_vicon_rot;
 
 	//Add the data to the storage vectors
 	viconsPos[viconIdx] = received_vicon_pos;
