@@ -1,30 +1,28 @@
 #ifndef _KROT_WRAP_PI_H
 #define _KROT_WRAP_PI_H
-#define PI 3.14159265359
+#define _KROT_WRAP_PI_H_PI 3.14159265358979323846
 
 //Cross-referenced rotation library functions
-#include <math.h>
-
-
-//NOTE:: the TooN library is used and must be included in the compile search path.
+#include <cmath>
 
 namespace krot
 {
 	//Wrap the given angle into the range (-PI:PI]
-	static void r_wrap_pi(double &temp)
+	//NOTE: the value is passed by reference but is NOT const. This function can change the value.
+	static void r_wrap_pi(double &tempAng)
 	{
-		if (temp>=0.0) {
-			//Remove superflous complete rotations
-			temp = fmod( temp , (2*PI) );
-			if ( temp > PI ) {
-				temp = temp - (2*PI);
+		if (tempAng>=0.0) {
+			//Remove superflous complete positive rotations
+			tempAng = fmod( tempAng , (2*_KROT_WRAP_PI_H_PI) );
+			if ( tempAng > _KROT_WRAP_PI_H_PI ) {
+				tempAng = tempAng - (2*_KROT_WRAP_PI_H_PI);
 			}
 		}
 		else {
-			//Remove superflous complete rotations
-			temp = fmod( temp , (-2*PI) );
-			if ( temp <= -PI ) {
-				temp = temp + (2*PI);
+			//Remove superflous complete negative rotations
+			tempAng = fmod( tempAng , ( (-2)*_KROT_WRAP_PI_H_PI ) );
+			if ( tempAng <= (-1)*_KROT_WRAP_PI_H_PI ) {
+				tempAng = tempAng + (2*_KROT_WRAP_PI_H_PI);
 			}
 		}
 	}

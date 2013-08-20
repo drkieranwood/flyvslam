@@ -4,15 +4,12 @@
 //Cross-referenced rotation library functions
 // <none>
 
-
-//NOTE:: the TooN library is used and must be included in the compile search path.
-
 namespace krot
 {
 	//Load numerical tolerance for checking unit vectors etc.
-	static double r_load_tol()
+	inline double r_load_tol(void)
 	{
-		return double(0.000000001);
+		return double(0.0000001);
 	}
 }
 
