@@ -86,14 +86,7 @@ void vicon_data::update(const geometry_msgs::TransformStamped::ConstPtr& msg)
 
 	//Find the current orientation as Euler angles
 	currentEuler = krot::r_q_to_e(received_vicon_rot);
-
-
-	//Find current yaw angle from the quaternion
-	double vicon_rotw = msg->transform.rotation.w;
-	double vicon_rotx = msg->transform.rotation.x;
-	double vicon_roty = msg->transform.rotation.y;
-	double vicon_rotz = msg->transform.rotation.z;
-	currentYaw = atan2 (2*(vicon_rotx*vicon_roty+vicon_rotz*vicon_rotw),1-2*(vicon_roty*vicon_roty+vicon_rotz*vicon_rotz));
+	currentYaw = currentEuler[2];
 	
 	//Move along one stroage. If at the end then wrap.
 	viconIdx++;
@@ -102,8 +95,5 @@ void vicon_data::update(const geometry_msgs::TransformStamped::ConstPtr& msg)
 		viconIdx = 0; 
 	}
 
-	//Temp debug
-	//std::cout << "TEMPDEBUG: Yaw difference: " << (currentYaw - currentEuler[2]) << std::endl;
-	//Temp debug
 }
 //eof

@@ -19,6 +19,7 @@
 #include <flyvslam/waypoint_data.h>
 #include <flyvslam/vicon_data.h>
 #include <flyvslam/ptam_data.h>
+#include <r_wrap_pi.h>
 #define PI 3.14159265
 
 
@@ -47,10 +48,18 @@ int main(int argc, char **argv)
 	//Get the waypoints from file, and set the start time.
 	waypoint_data waypoint_info;
 	waypoint_info.readWaypointData();
+
+	//Some helpful variables so the full object doesn't have to called every time.	
+	TooN::Vector<3, double> referencePos;
+	double referenceYaw;
+	TooN::Vector<3, double> currentPos;
+	TooN::Vector<3, double> currentVel;
+	double currentYaw;
 	
+
 	//=========================
 	//Publishers and subscibers
-	
+	//=========================
 	
 	//Subscribe to ros topics and setup callback functions. Also setup output node to ARDone. 
 	//The Vicon incomming queue is set to 1 so some data is always stored.
@@ -67,9 +76,10 @@ int main(int argc, char **argv)
 	//Setup subscriber to get the PTAM pose information
 	ros::Subscriber sub_ptam_pose = n.subscribe("/vslam/pose", 1, &ptam_data::update,&ptam_info);
 	
-	//Debug
-	//ros::Publisher  pub_debug = n.advertise<geometry_msgs::Twist>("/debugout", 1);
 
+
+	//=========================
+	//Timings
 	//=========================
 
 	//The timing is controled by a ros::rate object. The argument is the desired loop rate in Hz.
@@ -92,81 +102,114 @@ int main(int argc, char **argv)
 	//Main loop (loop forever)
 	while (ros::ok() && (waypoint_info.waypointLoops < maxWaypointLoops) )
 	{	
+		/****************************************
+		//GET SENSOR DATA
+		****************************************/
 		//Update the the current position reference input and yaw
-		TooN::Vector<3, double> referencePos = waypoint_info.getTargetPos(ros::Time::now());
-		double referenceYaw = waypoint_info.getTargetYaw();
+		referencePos = waypoint_info.getTargetPos(ros::Time::now());
+		referenceYaw = waypoint_info.getTargetYaw();
 	
 		//Update the current position and yaw from Vicon
-		TooN::Vector<3, double> currentPos = vicon_info.currentPos;
-		double currentYaw = vicon_info.currentYaw;
+		currentPos = vicon_info.currentPos;
+		currentVel = vicon_info.currentVel;
+		currentYaw = vicon_info.currentYaw;
 		
-		/*
-		std::cout << std::setw(6) << (180/3.14159)*vicon_info.currentEuler[0] << " " << (180/3.14159)*vicon_info.currentEuler[1] << " " << (180/3.14159)*vicon_info.currentEuler[2] << std::endl;
-		geometry_msgs::Twist debugout;
-		debugout.linear.x = vicon_info.currentPos[0];
-		debugout.linear.y = vicon_info.currentPos[1];
-		debugout.linear.z = vicon_info.currentPos[2];
-		debugout.angular.x = vicon_info.currentEuler[0];
-		debugout.angular.y = vicon_info.currentEuler[1];
-		debugout.angular.z = vicon_info.currentEuler[2];
-		pub_debug.publish(debugout);
-		*/
 		
 		/****************************************
 		//At this point in the loop we have the current position and yaw of the MAV expressed in the NED reference 
 		//frame and the desired position and yaw. Now the control code starts.
+		//CONTROLLER
 		****************************************/
-/*	
-		// deturmine yaw direction and speed
-		float angular_vel_mag = angle_dis(vicon_angle, atan2(follow_point.y-vicon_pos.y,follow_point.x-vicon_pos.x));
-		//limit yaw speed
-		if(fabs(angular_vel_mag) > 0.1)
+
+		//========================	
+		//Rotational
+		//======================== 
+
+		//Determine yaw control.
+		//--find yaw error
+		//--put in the range (-PI:PI]
+		//--limit to +-0.1
+
+		//Find angular error between current and desired yaw
+		double angErr = referenceYaw-currentYaw;
+		krot::r_wrap_pi(angErr);
+		
+		//Limit yaw speed
+		if(angErr > 0.1)
 		{
-			angular_vel_mag = 0.1;
+			angErr = 0.1;
 		}
-		float angular_vel = angular_vel_mag*angle_lerp_direction_face_point_from_pos_angle(vicon_pos,vicon_angle,follow_point);
+		if(angErr < -0.1)
+		{
+			angErr = -0.1;
+		}
+		
 		
 			
-		v3 diff_vec = hover_point-vicon_pos;
-		diff_vec.z = 0;
-		float diff_vec_mag = vector_mag(diff_vec);		
+		//========================	
+		//Translational
+		//========================
+		//Find position error in three exes
+		TooN::Vector<3, double> errVec = referencePos-currentPos;
+		//Set z error to zero temporarily
+		errVec[3] = 0;
+		//Find the 2D error total magnitude
+		double errMag = TooN::norm(errVec);
+		//Find 2D error unit direction and tangent direction (rotate 90degs)
+		TooN::Vector<3, double> errNorm = TooN::unit(errVec);	
+		TooN::Vector<3, double> errTang = TooN::makeVector((-1)*errNorm[1],errNorm[0],double(0.0));
 		
-		v3 tmp_norm (hover_point.x-vicon_pos.x,hover_point.y-vicon_pos.y,0);
-		normalise_vector(tmp_norm);
-		v3 tmp_tang (-tmp_norm.y,tmp_norm.x,0);
+		//Find normal and tangential components needed to move MAV to target.
+		//Limit to range [-1:1]
+		//Note that TooN uses the dot product when multiplying two vectors
+		double norm_mag = std::max( -1.0 , std::min( 1.0 ,0.5f*errMag -0.5f*(currentVel*errNorm) ) );
+		double tang_mag = std::max( -1.0 , std::min( 1.0 ,            -0.5f*(currentVel*errTang) ) );
+		TooN::Vector<3, double> tmp_vel = errNorm*norm_mag + errTang*tang_mag;
 		
-		//deturmine vel command
-		float norm_mag = std::max(-1.0f,(float)std::min(1.0f,0.3f*diff_vec_mag-0.3f*dot_product(vicon_vel,tmp_norm)));
-		float tang_mag = std::max(-1.0f,(float)std::min(1.0f,-0.3f*dot_product(vicon_vel,tmp_tang)));
-		v3 tmp_vel = tmp_norm*norm_mag+tmp_tang*tang_mag;
-		
-		
-		// limit vel magnitude
-		if(vector_mag(tmp_vel) > 1.0f)
+		// Limit vel magnitude to 1
+		if(TooN::norm(tmp_vel) > 1.0f)
 		{
-			normalise_vector(tmp_vel);
+			TooN::normalize(tmp_vel);
 			tmp_vel = tmp_vel*1.0f;
 		}
-		
-		//axis transform from vicon to drone (z remains the same but isnt used)
-		v3 drone_axis_x (cos(vicon_angle), sin(vicon_angle),0); 
-		v3 drone_axis_y (-sin(vicon_angle), cos(vicon_angle),0);
-		v3 tmp_vel_drone (dot_product(tmp_vel,drone_axis_x),dot_product(tmp_vel,drone_axis_y),0);
-*/	
+
+
+		//For Z only use the current Z velocity and Z error to form a simple PD control.
+		double diff_z = referencePos[2]-currentPos[2];
+		double tmp_Z_cmd = 1.0f*diff_z - 0.8*currentVel[2];
+		//Limit to +-1
+		if(tmp_Z_cmd > 1.0f)
+		{
+			tmp_Z_cmd = 1.0f;
+		}
+		if(tmp_Z_cmd < -1.0f)
+		{
+			tmp_Z_cmd = -1.0f;
+		}
+
+
+		/****************************************
+		//TRANSFORM AND OUTPUT (publish)
+		//Manual commands can be injected by overwriting the cmd_vel message values below. 
+		****************************************/		
+
+		//Axis transform from vicon to drone (z remains the same but isnt used)
+		TooN::Vector<3, double> drone_axis_x  = TooN::makeVector(cos(currentYaw), sin(currentYaw),0); 
+		TooN::Vector<3, double> drone_axis_y  = TooN::makeVector(-sin(currentYaw), cos(currentYaw),0);
+		TooN::Vector<3, double> tmp_vel_drone = TooN::makeVector(tmp_vel*drone_axis_x,tmp_vel*drone_axis_y,0);
+
+
+
 		//Publish movement commands to drones ros topic.
 		//This is only performed if new Vicon data has been received in the last 1 second.
 		if(1.0f > (ros::Time::now()-(vicon_info.vicon_last_update_time)).toSec())
 		{
 			//Create a message and fill in the command values
 			geometry_msgs::Twist cmd_vel;
-			//cmd_vel.linear.x = tmp_vel_drone.x;
-			//cmd_vel.linear.y = tmp_vel_drone.y;
-			//cmd_vel.linear.z = tmp_vel_drone.z;
-			//cmd_vel.angular.z = angular_vel;
-			cmd_vel.linear.x = 0;
-			cmd_vel.linear.y = 0;
-			cmd_vel.linear.z = 0;
-			cmd_vel.angular.z = 0;
+			cmd_vel.linear.x = tmp_vel_drone[0];
+			cmd_vel.linear.y = (-1)*tmp_vel_drone[1];
+			cmd_vel.linear.z = (-1)*tmp_Z_cmd;
+			cmd_vel.angular.z = (-1)*angErr;
 			pub_cmd_vel.publish(cmd_vel);	
 		}
 		else
