@@ -1,6 +1,7 @@
 #include <flyvslam/ptam_data.h>
 #include <r_apply_q.h>
 #include <r_multi_q.h>
+#include <r_check_q.h>
 #include <r_q_to_e.h>
 
 //Constructor.
@@ -13,10 +14,7 @@ ptam_data::ptam_data()
 
 	initPtamPos = TooN::makeVector(0.0,0.0,0.0);
 	initPtamRot = TooN::makeVector(1.0,0.0,0.0,0.0);
-	initPtamPosInv = TooN::makeVector(0.0,0.0,0.0);
-	initPtamRotInv = TooN::makeVector(1.0,0.0,0.0,0.0);
 	setPtamInit = 0;
-	setPtamInitInv = 0;
 
 	initViconPos = TooN::makeVector(0.0,0.0,0.0);
 	initViconRot = TooN::makeVector(1.0,0.0,0.0,0.0);
@@ -29,34 +27,52 @@ ptam_data::ptam_data()
 //Extract the current position and yaw from the ptam message and update the velocity. 
 void ptam_data::update(const geometry_msgs::PoseWithCovarianceStampedConstPtr& msg)
 {
-	//Save the initial PTAM pose. Only do this once.
+	//Save the initial PTAM pose in the camera RF. Only do this once.
 	if (setPtamInit==0)
 	{
 		initPtamPos = TooN::makeVector(msg->pose.pose.position.x,msg->pose.pose.position.y,msg->pose.pose.position.z);
 		initPtamRot = TooN::makeVector(msg->pose.pose.orientation.w,msg->pose.pose.orientation.x,msg->pose.pose.orientation.y,msg->pose.pose.orientation.z);
 		setPtamInit = 1;
+
+		//Check the quaternion is valid and normalise.
+		krot::r_check_q(initPtamRot);
 	}
 
-	//Only transform to NED if the initialisation has been done
+
+	
+	//Only transform to NED if the initialisation has been done.
+	//Until the scale is set is assumes a scale of 1.
 	if ( (setPtamInit==1) && (setViconInit==1))
 	{
-		//Apply the transform from VSLAM to NED
+		/******************
+		//TRANSFORM TO NED RF
+		******************/
 
-		//First extract to temp variables
+		//First extract to temp variables from the message
 		TooN::Vector<3, double> workingPos = TooN::makeVector(msg->pose.pose.position.x,msg->pose.pose.position.y,msg->pose.pose.position.z);	
 		TooN::Vector<4, double> workingRot = TooN::makeVector(msg->pose.pose.orientation.w,msg->pose.pose.orientation.x,msg->pose.pose.orientation.y,msg->pose.pose.orientation.z);
 
-		//Invert the affine transform and scale
-		workingPos = (-1)*(krot::r_apply_q(workingPos*ptamScale,workingRot));
-		workingRot = krot::r_inv_q(workingRot);
-if (0)
-{
+		//Check the incomming quaternion
+		krot::r_check_q(workingRot);
 
+
+
+		//Invert the affine transform and scale
+		workingPos = (-1)*(krot::r_apply_q( (workingPos*ptamScale) ,workingRot));
+		workingRot = krot::r_inv_q(workingRot);
+
+	//Check the quaternion
+	krot::r_check_q(workingRot);
+
+		//Find some useful values
+		TooN::Vector<3,double> initPtamPosInv = (-1)*(krot::r_apply_q( (initPtamPos*ptamScale) ,initPtamRot));
+		TooN::Vector<4,double> initPtamRotInv = krot::r_inv_q(initPtamRot);
 
 		/******************
 		//Position
 		******************/
 		//Remove initial position from measurement
+		
 		workingPos = workingPos - initPtamPosInv;
 		//Rotate by initial orientation
 		workingPos = (-1)*(krot::r_apply_q(workingPos,initPtamRotInv));
@@ -71,21 +87,22 @@ if (0)
 		//Orientation
 		******************/
 		//Find difference to initial orientation. qt = q0^-1 * qi
+		//NOTE: used initPtamRot since it is the inverse of initPtamRotInv.
 		workingRot = krot::r_multi_q(initPtamRot,workingRot);
 		//Swap axes order
 		workingRot = TooN::makeVector(workingRot[0],workingRot[3],workingRot[1],workingRot[2]);
 		//Add initial Vicon
 		workingRot = krot::r_multi_q(initViconRot,workingRot);
+		//Check the outgoing quaternion
+		krot::r_check_q(workingRot);
 
 		/******************
 		//Output
 		******************/
 		currentPos = workingPos;
-		currentRot = currentRot;
+		currentRot = workingRot;
 		currentEuler = krot::r_q_to_e(currentRot);
 		currentYaw = currentEuler[2];
-}
-
 
 	}
 }
@@ -100,6 +117,10 @@ void ptam_data::setInitVicon(TooN::Vector<3, double> initPos,TooN::Vector<4, dou
 		initViconRot = initRot;
 		setViconInit = 1;
 		initViconRotInv = krot::r_inv_q(initViconRot);
+
+		//Check the quaternion is valid and normalise.
+		krot::r_check_q(initViconRot);
+		krot::r_check_q(initViconRotInv);
 	}
 }
 
@@ -107,12 +128,6 @@ void ptam_data::setInitVicon(TooN::Vector<3, double> initPos,TooN::Vector<4, dou
 void ptam_data::setPtamScale(double scaleTemp)
 {
 	ptamScale = scaleTemp;
-	if (setPtamInitInv==0) 
-	{
-		initPtamPosInv = (-1)*(krot::r_apply_q(initPtamPos*ptamScale,initPtamRot));
-		initPtamRotInv = krot::r_inv_q(initPtamRot);
-		setPtamInitInv = 1;
-	}
 }
 
 

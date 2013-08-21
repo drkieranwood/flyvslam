@@ -26,10 +26,7 @@ class ptam_data
 		//Storage for the initial PTAM pose
 		TooN::Vector<3, double> initPtamPos;
 		TooN::Vector<4, double> initPtamRot;
-		TooN::Vector<3, double> initPtamPosInv;
-		TooN::Vector<4, double> initPtamRotInv;
-		int setPtamInit;
-		int setPtamInitInv;
+		int setPtamInit;;
 
 		//Storage for the initial Vicon pose when PTAM inits
 		TooN::Vector<3, double> initViconPos;

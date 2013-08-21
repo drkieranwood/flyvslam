@@ -40,10 +40,11 @@ int main(int argc, char **argv)
 	ptam_data ptam_info;
 
 	//Vector to hold the latest output to the MAV
-	TooN::Vector<3, double> current_cmd_vel = TooN::makeVector(0,0,0);
+	//TooN::Vector<3, double> current_cmd_vel = TooN::makeVector(0,0,0);
 
 	//Maximum number of times to repeat the waypoints. Put this value high for long flights.
 	int maxWaypointLoops = 1;
+	int landingNow = 0;
 
 	//Get the waypoints from file, and set the start time.
 	waypoint_data waypoint_info;
@@ -61,13 +62,17 @@ int main(int argc, char **argv)
 	//Flag to break out of PTAM control and back to safety control.
 	//If set to 0 then the original control on Vicon will takeover and continue the waypoints.
 	int PTAM_OK = 0;
+
+	//Init of PTAM. First the baseline is set which has an arbitrary scale. Then a motion is performed
+	//to calculate the scale by comparing the magnitudes of the vectors from VSLAM and vicon.
 	int ptamInit = 0;
+	int scaleInit = 0;
 	//Values to get the scale
 	TooN::Vector<3, double> ptamPos_one;
 	TooN::Vector<3, double> ptamPos_two;
 	TooN::Vector<3, double> viconPos_one;
 	TooN::Vector<3, double> viconPos_two;
-	int scaleInit = 0;
+
 	
 
 	//=========================
@@ -116,7 +121,7 @@ int main(int argc, char **argv)
 	waypoint_info.waypoint_time = ros::Time::now();
 
 	//Main loop (loop forever)
-	while (ros::ok() && (waypoint_info.waypointLoops < maxWaypointLoops) )
+	while (ros::ok() && (waypoint_info.waypointLoops < maxWaypointLoops) && (landingNow==0))
 	{	
 		/****************************************
 		//GET SENSOR DATA
@@ -198,128 +203,143 @@ int main(int argc, char **argv)
 			double ptamDist  = TooN::norm(ptamPos_two - ptamPos_one);
 			double viconDist = TooN::norm(viconPos_two - viconPos_one);
 
-			ptam_info.setPtamScale(double(ptamDist/viconDist));
+			ptam_info.setPtamScale(double(viconDist/ptamDist));
+
+			//Activate PTAM feedback
+			PTAM_OK = 1;
 		}
 
 		
-
-
-		if (PTAM_OK == 0) 
+		//If the ptam data is deemed to be ok then swap to using ptam for control input
+		if (PTAM_OK == 1) 
 		{
-			/****************************************
-			//At this point in the loop we have the current position and yaw of the MAV expressed in the NED reference 
-			//frame and the desired position and yaw. Now the control code starts.
-			//CONTROLLER
-			****************************************/
+			//If within 0.2m in all axes
+			if ( ((fabs(currentPos[0]-ptamPos[0])) < 0.2) && ((fabs(currentPos[1]-ptamPos[1])) < 0.2) && ((fabs(currentPos[2]-ptamPos[2])) < 0.2))
+			{
+				currentPos = ptamPos;
+				currentYaw = ptamYaw;
+			}
+		}
 
-			//========================	
-			//Rotational
-			//======================== 
+		/****************************************
+		//At this point in the loop we have the current position and yaw of the MAV expressed in the NED reference 
+		//frame and the desired position and yaw. Now the control code starts.
+		//CONTROLLER
+		****************************************/
 
-			//Determine yaw control.
-			//--find yaw error
-			//--put in the range (-PI:PI]
-			//--limit to +-0.1
+		//========================	
+		//Rotational
+		//======================== 
 
-			//Find angular error between current and desired yaw
-			double angErr = referenceYaw-currentYaw;
-			krot::r_wrap_pi(angErr);
+		//Determine yaw control.
+		//--find yaw error
+		//--put in the range (-PI:PI]
+		//--limit to +-0.1
+
+		//Find angular error between current and desired yaw
+		double angErr = referenceYaw-currentYaw;
+		krot::r_wrap_pi(angErr);
+	
+		//Limit yaw speed
+		if(angErr > 0.1)
+		{
+			angErr = 0.1;
+		}
+		if(angErr < -0.1)
+		{
+			angErr = -0.1;
+		}
+	
+	
 		
-			//Limit yaw speed
-			if(angErr > 0.1)
-			{
-				angErr = 0.1;
-			}
-			if(angErr < -0.1)
-			{
-				angErr = -0.1;
-			}
-		
-		
-			
-			//========================	
-			//Translational
-			//========================
-			//Find position error in three exes
-			TooN::Vector<3, double> errVec = referencePos-currentPos;
-			//Set z error to zero temporarily
-			errVec[3] = 0;
-			//Find the 2D error total magnitude
-			double errMag = TooN::norm(errVec);
-			//Find 2D error unit direction and tangent direction (rotate 90degs)
-			TooN::Vector<3, double> errNorm = TooN::unit(errVec);	
-			TooN::Vector<3, double> errTang = TooN::makeVector((-1)*errNorm[1],errNorm[0],double(0.0));
-		
-			//Find normal and tangential components needed to move MAV to target.
-			//Limit to range [-1:1]
-			//Note that TooN uses the dot product when multiplying two vectors
-			double norm_mag = std::max( -1.0 , std::min( 1.0 ,0.5f*errMag -0.5f*(currentVel*errNorm) ) );
-			double tang_mag = std::max( -1.0 , std::min( 1.0 ,            -0.5f*(currentVel*errTang) ) );
-			TooN::Vector<3, double> tmp_vel = errNorm*norm_mag + errTang*tang_mag;
-		
-			// Limit vel magnitude to 1
-			if(TooN::norm(tmp_vel) > 1.0f)
-			{
-				TooN::normalize(tmp_vel);
-				tmp_vel = tmp_vel*1.0f;
-			}
+		//========================	
+		//Translational
+		//========================
+		//Find position error in three exes
+		TooN::Vector<3, double> errVec = referencePos-currentPos;
+		//Set z error to zero temporarily
+		errVec[3] = 0;
+		//Find the 2D error total magnitude
+		double errMag = TooN::norm(errVec);
+		//Find 2D error unit direction and tangent direction (rotate 90degs)
+		TooN::Vector<3, double> errNorm = TooN::unit(errVec);	
+		TooN::Vector<3, double> errTang = TooN::makeVector((-1)*errNorm[1],errNorm[0],double(0.0));
+	
+		//Find normal and tangential components needed to move MAV to target.
+		//Limit to range [-1:1]
+		//Note that TooN uses the dot product when multiplying two vectors
+		double norm_mag = std::max( -1.0 , std::min( 1.0 ,0.5f*errMag -0.5f*(currentVel*errNorm) ) );
+		double tang_mag = std::max( -1.0 , std::min( 1.0 ,            -0.5f*(currentVel*errTang) ) );
+		TooN::Vector<3, double> tmp_vel = errNorm*norm_mag + errTang*tang_mag;
+	
+		// Limit vel magnitude to 1
+		if(TooN::norm(tmp_vel) > 1.0f)
+		{
+			TooN::normalize(tmp_vel);
+			tmp_vel = tmp_vel*1.0f;
+		}
 
 
-			//For Z only use the current Z velocity and Z error to form a simple PD control.
-			double diff_z = referencePos[2]-currentPos[2];
-			double tmp_Z_cmd = 1.0f*diff_z - 0.8*currentVel[2];
-			//Limit to +-1
-			if(tmp_Z_cmd > 1.0f)
-			{
-				tmp_Z_cmd = 1.0f;
-			}
-			if(tmp_Z_cmd < -1.0f)
-			{
-				tmp_Z_cmd = -1.0f;
-			}
+		//For Z only use the current Z velocity and Z error to form a simple PD control.
+		double diff_z = referencePos[2]-currentPos[2];
+		double tmp_Z_cmd = 1.0f*diff_z - 0.8*currentVel[2];
+		//Limit to +-1
+		if(tmp_Z_cmd > 1.0f)
+		{
+			tmp_Z_cmd = 1.0f;
+		}
+		if(tmp_Z_cmd < -1.0f)
+		{
+			tmp_Z_cmd = -1.0f;
+		}
 
 
-			/****************************************
-			//TRANSFORM AND OUTPUT (publish)
-			//Manual commands can be injected by overwriting the cmd_vel message values below. 
-			****************************************/		
+		/****************************************
+		//TRANSFORM AND OUTPUT (publish)
+		//Manual commands can be injected by overwriting the cmd_vel message values below. 
+		****************************************/		
 
-			//Axis transform from vicon to drone (z remains the same but isnt used)
-			TooN::Vector<3, double> drone_axis_x  = TooN::makeVector(cos(currentYaw), sin(currentYaw),0); 
-			TooN::Vector<3, double> drone_axis_y  = TooN::makeVector(-sin(currentYaw), cos(currentYaw),0);
-			TooN::Vector<3, double> tmp_vel_drone = TooN::makeVector(tmp_vel*drone_axis_x,tmp_vel*drone_axis_y,0);
+		//Axis transform from vicon to drone (z remains the same but isnt used)
+		TooN::Vector<3, double> drone_axis_x  = TooN::makeVector(cos(currentYaw), sin(currentYaw),0); 
+		TooN::Vector<3, double> drone_axis_y  = TooN::makeVector(-sin(currentYaw), cos(currentYaw),0);
+		TooN::Vector<3, double> tmp_vel_drone = TooN::makeVector(tmp_vel*drone_axis_x,tmp_vel*drone_axis_y,0);
 
 
 
-			//Publish movement commands to drones ros topic.
-			//This is only performed if new Vicon data has been received in the last 1 second.
-			if(1.0f > (ros::Time::now()-(vicon_info.vicon_last_update_time)).toSec())
-			{
-				//Create a message and fill in the command values
-				geometry_msgs::Twist cmd_vel;
-				cmd_vel.linear.x = tmp_vel_drone[0];
-				cmd_vel.linear.y = (-1)*tmp_vel_drone[1];
-				cmd_vel.linear.z = (-1)*tmp_Z_cmd;
-				cmd_vel.angular.z = (-1)*angErr;
-				pub_cmd_vel.publish(cmd_vel);	
-			}
-			else
-			{
-				//Else no new Vicon data is available so send zeros
-				ROS_INFO("No new Vicon data or nan error. Sending [0,0,0,0]' vel_cmd");
-				geometry_msgs::Twist cmd_vel;
-				cmd_vel.linear.x = 0;
-				cmd_vel.linear.y = 0;
-				cmd_vel.linear.z = 0;
-				cmd_vel.angular.z = 0;
-				pub_cmd_vel.publish(cmd_vel);	
-			}
+		//Publish movement commands to drones ros topic.
+		//This is only performed if new Vicon data has been received in the last 1 second.
+		if(1.0f > (ros::Time::now()-(vicon_info.vicon_last_update_time)).toSec())
+		{
+			//Create a message and fill in the command values
+			geometry_msgs::Twist cmd_vel;
+			cmd_vel.linear.x = tmp_vel_drone[0];
+			cmd_vel.linear.y = (-1)*tmp_vel_drone[1];
+			cmd_vel.linear.z = (-1)*tmp_Z_cmd;
+			cmd_vel.angular.z = (-1)*angErr;
+			pub_cmd_vel.publish(cmd_vel);	
+		}
+		else
+		{
+			//Else no new Vicon data is available so send zeros
+			ROS_INFO("No new Vicon data or nan error. Sending [0,0,0,0]' vel_cmd");
+			geometry_msgs::Twist cmd_vel;
+			cmd_vel.linear.x = 0;
+			cmd_vel.linear.y = 0;
+			cmd_vel.linear.z = 0;
+			cmd_vel.angular.z = 0;
+			pub_cmd_vel.publish(cmd_vel);	
 		}
 		
 		//Check for new ros messages
 		ros::spinOnce();
 		rateLimiter.sleep();
 		ros::spinOnce();
+		
+		//If at the last waypoint then land on next loop
+		if (waypoint_info.currentIdx == (waypoint_info.waypointCount-1))
+		{
+			landingNow = 1;
+		}
 	} 
 
 	//After main flight loop need to land and shut down
@@ -327,16 +347,20 @@ int main(int argc, char **argv)
 	ROS_INFO("LANDING");
 	{
 		std_msgs::Empty tempMsg;
-		pub_takeoff.publish(tempMsg);
+
+		pub_land.publish(tempMsg);
 		ros::spinOnce();
 		sleepone.sleep();
-		pub_takeoff.publish(tempMsg);
+
+		pub_land.publish(tempMsg);
 		ros::spinOnce();
 		sleepone.sleep();
-		pub_takeoff.publish(tempMsg);
+
+		pub_land.publish(tempMsg);
 		ros::spinOnce();
 		sleepone.sleep();
 	}
+
 
 	ROS_INFO("flyvslam::End flight script.");
   	return 0;
