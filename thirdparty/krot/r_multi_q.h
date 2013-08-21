@@ -3,20 +3,13 @@
 
 //Cross-referenced rotation library functions
 #include <TooN/TooN.h>  //TooN is required
-#include <r_check_q.h>
 
 namespace krot
 {	
 	//Multiply two quaternions together. 
 	//This expands the first quaternion into a special 'quaternion matrix' first, then uses normal matrix multiplication.
-	//NOTE: arguments are passed by reference and are NOT const because the r_check_q() function needs to be able to normalise them.
-	
-	static TooN::Vector<4,double> r_multi_q(TooN::Vector<4,double> &quatone,TooN::Vector<4,double> &quattwo)
+	inline TooN::Vector<4,double> r_multi_q(TooN::Vector<4,double> const &quatone,TooN::Vector<4,double> const &quattwo)
 	{
-		//Check the quaternions
-		r_check_q(quatone);
-		r_check_q(quattwo);
-
 		//Turn the first quaternion into a 'quaternion matrix'
 		TooN::Matrix<4,4,double> augVecM;
 		augVecM(0,0) = quatone[0];
@@ -40,12 +33,8 @@ namespace krot
 		augVecM(3,3) = quatone[0];
 
 		//Multiply using normal matrix multiplication.
-		TooN::Vector<4,double> temp_out = augVecM*quattwo;
-
-		//Check the quaternion
-		r_check_q(temp_out);
-
-		return temp_out;	
+		TooN::Vector<4,double> temp_out = (augVecM*quattwo);
+		return temp_out;
 	}
 	
 }

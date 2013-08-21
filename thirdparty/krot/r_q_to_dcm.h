@@ -3,19 +3,14 @@
 
 //Cross-referenced rotation library functions
 #include <TooN/TooN.h>  //TooN is required
-#include <r_check_q.h>
 
 namespace krot
 {
 	//Convert quaternion into a direction-cosine-matrix (DCM).
 	//Quaternion in [w,x,y,z]' order with unit magnitude.
 	//DCM is 3 by 3 and special orthogonal.
-	//NOTE: arguments are passed by reference and NOT const because the r_check_q() function needs to be able to normalise them.
-	static TooN::Matrix<3,3,double> r_q_to_dcm(TooN::Vector<4,double> &tempQuat)
-	{
-		//Check the quaternion is valid.
-		r_check_q(tempQuat);
-	
+	inline TooN::Matrix<3,3,double> r_q_to_dcm(TooN::Vector<4,double> const &tempQuat)
+	{	
 		//Convert to DCM.
 		TooN::Matrix<3,3,double> temp_out;
 		temp_out(0,0) = (tempQuat[0]*tempQuat[0]) + (tempQuat[1]*tempQuat[1]) - (tempQuat[2]*tempQuat[2]) - (tempQuat[3]*tempQuat[3]);

@@ -8,8 +8,8 @@
 namespace krot
 {
 	//Wrap the given angle into the range (-PI:PI]
-	//NOTE: the value is passed by reference but is NOT const. This function can change the value.
-	static void r_wrap_pi(double &tempAng)
+	//NOTE: passed by reference and NOT const.
+	inline void r_wrap_pi(double &tempAng)
 	{
 		if (tempAng>=0.0) {
 			//Remove superflous complete positive rotations

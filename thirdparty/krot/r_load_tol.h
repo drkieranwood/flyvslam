@@ -9,7 +9,7 @@ namespace krot
 	//Load numerical tolerance for checking unit vectors etc.
 	inline double r_load_tol(void)
 	{
-		return double(0.0000001);
+		return double(0.00000001);
 	}
 }
 

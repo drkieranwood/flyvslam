@@ -8,9 +8,9 @@
 
 namespace krot
 {
-	//Check the quaternion is valid (i.e. unit magnitude)
-	//NOTE: the quaternion is passed by reference but is NOT const. This function can change the value.
-	static void r_check_q(TooN::Vector<4,double> &tempQuat)
+	//Check the quaternion is valid and has unit magnitude.
+	//NOTE: passed by reference and NOT const.
+	inline void r_check_q(TooN::Vector<4,double> &tempQuat)
 	{
 		//Check quaternion has 4 elements
 		if (tempQuat.size() != 4)
@@ -20,11 +20,9 @@ namespace krot
 
 		//Check if the quaternion norm is close to unity.
 		double tempTol = r_load_tol();
-		double tempNorm = TooN::norm(tempQuat);
+		double tempNorm = ( TooN::norm(tempQuat) ) - (1.0);
 
-		std::cout << (tempNorm-1) << std::endl;
-
-		if ( ( tempNorm > (1.0 + tempTol) ) || ( tempNorm < (1.0 - tempTol) ) )
+		if ( ( tempNorm > tempTol ) || ( tempNorm < (-1)*tempTol ) )
 		{
 			std::cerr << "Quaternion norm is far from unity." << std::endl;
 		}

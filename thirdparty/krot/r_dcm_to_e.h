@@ -13,11 +13,8 @@ namespace krot
 	//Convert direction-cosine-matrix into Euler angles.
 	//DCM is 3 by 3 and special orthogonal.
 	//Euler triplet in [phi,theta,psi]' order in radians (the rotation order is yaw(psi),pitch(theta),roll(phi))
-	static TooN::Vector<3,double> r_dcm_to_e(TooN::Matrix<3,3,double> const &tempDCM)
-	{
-		//TODO: Add a function to check the DCM is valid
-		//r_check_dcm(tempDCM);
-		
+	inline TooN::Vector<3,double> r_dcm_to_e(TooN::Matrix<3,3,double> const &tempDCM)
+	{		
 		TooN::Vector<3,double> temp_out;
 
 		//Find a value for theta
@@ -30,7 +27,7 @@ namespace krot
 		    temp_out[0] = atan2( tempDCM(1,2) , tempDCM(2,2) );
 		    temp_out[2] = atan2( tempDCM(0,1) , tempDCM(0,0) );
 		}
-		else if ( (tempDCM(0,2)<(-1+tempTol)) && (tempDCM(0,2)>(-1-tempTol)) ) {     
+		else if ( (tempDCM(0,2)<(-1.0+tempTol)) && (tempDCM(0,2)>(-1.0-tempTol)) ) {     
 		    //If theta is at 90 then set phi=0, theta=pi/2, and calculate psi
 		    temp_out[0] = 0;
 		    temp_out[1] = _KROT_DCM_TO_E_H_PI/2;
