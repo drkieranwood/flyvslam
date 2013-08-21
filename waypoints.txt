@@ -5,22 +5,29 @@
 #--time is the time it should take to get to the next waypoint
 #--ideally always start with zeros and spaces are allowed
 
-#Takeoff
+#Takeoff and stabilise at altitude 
+#(15s is enough time to get from most places in the arena)
 0.0 0.0 0.0         0.0 -1000.0 0.0         5.0
-
-#Stabilise at height and start ptam
-0.0 0.0 -1.0        0.0 -1000.0 0.0         10.0
 0.0 0.0 -1.0        0.0 -1000.0 0.0         10.0
 
-#Move to +1m and stabilise
+#Start ptam init. and move
+0.0 0.0 -1.0        0.0 -1000.0 0.0         10.0
+
+#Stabilise at +1m offset and stop ptam init.
 1.0 0.0 -1.0        0.0 -1000.0 0.0         5.0
 1.0 0.0 -1.0        0.0 -1000.0 0.0         5.0
+
+#Grab position for scaling and move back
 1.0 0.0 -1.0        0.0 -1000.0 0.0         10.0
-
-#Move back and stabilise
 0.0 0.0 -1.0        0.0 -1000.0 0.0         5.0
 
-#Move forwards and then back and stabilise
+#Grab position for scaling
+0.0 0.0 -1.0        0.0 -1000.0 0.0         5.0
+
+#At this point all initialisation has been completed, 
+#and a route of waypoints can be specified.
+
+#Flight pattern
 0.0 0.0  -1.0        0.0 -1000.0 0.0         10.0
 0.0 -1.0 -1.0        0.0 -1000.0 0.0         10.0
 0.0 0.0  -1.0        0.0 -1000.0 0.0         5.0
@@ -32,6 +39,7 @@
 0.0 0.0  -1.0        0.0 -1000.0 0.0         10.0
 
 
-#Land over 10s from 1m alt. at origin
+
+#Land over 10s from 1m alt. at origin. (actually only descent to 0.2m alt.)
 0.0 0.0 -1.0         0.0 -1000.0 0.0         10.0
-0.0 0.0 0.0          0.0 -1000.0 0.0         5.0
+0.0 0.0 -0.2         0.0 -1000.0 0.0         5.0

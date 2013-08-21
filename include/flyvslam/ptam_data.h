@@ -5,12 +5,12 @@
 #include "geometry_msgs/PoseWithCovarianceStamped.h"
 #include "ros/ros.h"
 
-///Class to store the PTAM data received.
-///This class stores n previous PTAM data frames and provides a differential velocity.
+//Class to store the PTAM data received.
+//This class stores n previous PTAM data frames and provides a basic backwards differential velocity.
 class ptam_data
 {
 	public:
-		//Empty constructor.
+		//Constructor
 		ptam_data();
 
 		//Update the PTAM info with a new ptam frame.
@@ -23,12 +23,13 @@ class ptam_data
 		void setPtamScale(double scaleTemp);
 
 
+
 		//Storage for the initial PTAM pose
 		TooN::Vector<3, double> initPtamPos;
 		TooN::Vector<4, double> initPtamRot;
-		int setPtamInit;;
+		int setPtamInit;
 
-		//Storage for the initial Vicon pose when PTAM inits
+		//Storage for the initial Vicon pose when PTAM inits. Store the inverse orientation for ease.
 		TooN::Vector<3, double> initViconPos;
 		TooN::Vector<4, double> initViconRot;
 		TooN::Vector<4, double> initViconRotInv;
@@ -36,14 +37,13 @@ class ptam_data
 
 		//Current pose info. This is the latest measurement transformed into NED
 		TooN::Vector<3, double> currentPos;
+		TooN::Vector<3, double> currentVel;
 		TooN::Vector<4, double>	currentRot;
 		TooN::Vector<3, double> currentEuler;
 		double currentYaw;
 
 		//Scale
 		double ptamScale;
-
-
 };
 #endif
 //eof

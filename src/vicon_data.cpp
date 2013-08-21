@@ -5,19 +5,19 @@
 vicon_data::vicon_data()
 {
 	viconCount=3;
-	currentVel=TooN::makeVector(0,0,0);
-	currentPos=TooN::makeVector(0,0,0);
-	currentRot=TooN::makeVector(1,0,0,0);
-
-	currentEuler=TooN::makeVector(0,0,0);
-
+	currentVel=TooN::makeVector(0.0,0.0,0.0);
+	currentPos=TooN::makeVector(0.0,0.0,0.0);
+	currentRot=TooN::makeVector(1.0,0.0,0.0,0.0);
+	currentEuler=TooN::makeVector(0.0,0.0,0.0);
 	currentYaw=0.0;
+	
 	viconIdx=0;
 
 	viconsPos =  new TooN::Vector<3, double>[viconCount];
 	viconsRot =  new TooN::Vector<4, double>[viconCount];
 	viconsTime = new ros::Time[viconCount];
 }
+
 
 
 //Extract the current position and yaw from the Vicon message and update the velocity. 
@@ -27,36 +27,34 @@ void vicon_data::update(const geometry_msgs::TransformStamped::ConstPtr& msg)
 	vicon_last_update_time = ros::Time::now();
 	
 	//Extract the position vector
-	TooN::Vector<3, double> received_vicon_pos = TooN::makeVector(msg->transform.translation.x,msg->transform.translation.y,msg->transform.translation.z);
-	TooN::Vector<4, double> received_vicon_rot = TooN::makeVector(msg->transform.rotation.w,msg->transform.rotation.x,msg->transform.rotation.y,msg->transform.rotation.z);
+	TooN::Vector<3, double> workingPos = TooN::makeVector(msg->transform.translation.x,msg->transform.translation.y,msg->transform.translation.z);
+	TooN::Vector<4, double> workingRot = TooN::makeVector(msg->transform.rotation.w,msg->transform.rotation.x,msg->transform.rotation.y,msg->transform.rotation.z);
 
 
 	//================================================================================
 	// CONVERT INTO NED RF
 	//================================================================================
-	TooN::Vector<3, double> tmp_received_vicon_pos = received_vicon_pos;
-	TooN::Vector<4, double> tmp_received_vicon_rot = received_vicon_rot;
-	received_vicon_pos[0]=tmp_received_vicon_pos[0];
-	received_vicon_pos[1]=(-1)*tmp_received_vicon_pos[1];
-	received_vicon_pos[2]=(-1)*tmp_received_vicon_pos[2];
+	TooN::Vector<3, double> tmp_workingPos = workingPos;
+	TooN::Vector<4, double> tmp_workingRot = workingRot;
+	workingPos[0]=tmp_workingPos[0];
+	workingPos[1]=(-1)*tmp_workingPos[1];
+	workingPos[2]=(-1)*tmp_workingPos[2];
 
-	received_vicon_rot[0]=tmp_received_vicon_rot[0];
-	received_vicon_rot[1]=tmp_received_vicon_rot[1];
-	received_vicon_rot[2]=(-1)*tmp_received_vicon_rot[2];
-	received_vicon_rot[3]=(-1)*tmp_received_vicon_rot[3];
+	workingRot[0]=tmp_workingRot[0];
+	workingRot[1]=tmp_workingRot[1];
+	workingRot[2]=(-1)*tmp_workingRot[2];
+	workingRot[3]=(-1)*tmp_workingRot[3];
 	//================================================================================
 	//================================================================================
 
 	
 	//Store the Vicon data, extract the time info from the message time stamp.
-	currentPos      = received_vicon_pos;
-	vicon_time.sec  = msg->header.stamp.sec; 
-	vicon_time.nsec = msg->header.stamp.nsec;
-	currentRot = received_vicon_rot;
+	currentPos = workingPos;
+	currentRot = workingRot;
 
 	//Add the data to the storage vectors
-	viconsPos[viconIdx] = received_vicon_pos;
-	viconsRot[viconIdx] = received_vicon_rot;
+	viconsPos[viconIdx] = workingPos;
+	viconsRot[viconIdx] = workingRot;
 	viconsTime[viconIdx].sec  = msg->header.stamp.sec; 
 	viconsTime[viconIdx].nsec = msg->header.stamp.nsec; 
 	
@@ -86,7 +84,7 @@ void vicon_data::update(const geometry_msgs::TransformStamped::ConstPtr& msg)
 	}
 
 	//Find the current orientation as Euler angles
-	currentEuler = krot::r_q_to_e(received_vicon_rot);
+	currentEuler = krot::r_q_to_e(workingRot);
 	currentYaw = currentEuler[2];
 	
 	//Move along one stroage. If at the end then wrap.
