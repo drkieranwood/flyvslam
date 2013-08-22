@@ -20,8 +20,17 @@ ptam_data::ptam_data()
 	initViconPos = TooN::makeVector(0.0,0.0,0.0);
 	initViconRot = TooN::makeVector(1.0,0.0,0.0,0.0);
 	setViconInit = 0;
+	
+	initCamerCorr = TooN::makeVector(0.0,0.0,0.0);
+	cameraOffset = TooN::makeVector(0.195,0.0,0.0);
+	setCameraCorr = 0;
 
 	ptamScale = 1.0;
+	
+	ptamCount = 3;
+	ptamIdx = 0;
+	ptamsPos =  new TooN::Vector<3, double>[ptamCount];
+	ptamsTime = new ros::Time[ptamCount];
 }
 
 
@@ -46,7 +55,7 @@ void ptam_data::update(const geometry_msgs::PoseWithCovarianceStampedConstPtr& m
 	if ( (setPtamInit==1) && (setViconInit==1))
 	{
 		//========================	
-		//TRANSFORM PTAM TO NED
+		//TRANSFORM PTAM TinitCamerCorrO NED
 		//there are few calls to check the quaternion is valid but this
 		//function also re-normalises the value for increased accuracy.
 		//========================
@@ -73,7 +82,7 @@ void ptam_data::update(const geometry_msgs::PoseWithCovarianceStampedConstPtr& m
 		//Remove initial position from measurement
 		workingPos = workingPos - initPtamPosInv;
 		//Rotate by initial orientation
-		workingPos = (-1)*(krot::r_apply_q(workingPos,initPtamRotInv));
+		workingPos = (-1)*(krot::r_apply_q(workingPos,initPtamRotInv));		
 		//Swap axes order
 		workingPos = TooN::makeVector(workingPos[2],workingPos[0],workingPos[1]);
 		//Un-rotate by initial Vicon orientation
@@ -93,17 +102,68 @@ void ptam_data::update(const geometry_msgs::PoseWithCovarianceStampedConstPtr& m
 		workingRot = krot::r_multi_q(initViconRot,workingRot);
 			//Check the outgoing quaternion
 			krot::r_check_q(workingRot);
+
+		//========================
+		//Remove camera offset
+		//========================	
+		//Project [0.195,0,0]' into the world frame using the inverse of the current orientation
+		TooN::Vector<4,double> tmp_invRot = krot::r_inv_q(workingRot);
+		TooN::Vector<3,double> cameraCorr = krot::r_apply_q(cameraOffset,tmp_invRot);
+		//If the first time then store the correction
+		if (setCameraCorr==0)
+		{
+				initCamerCorr = cameraCorr;
+				setCameraCorr = 1;
+		}
+		//Apply correction in world frame
+		workingPos = workingPos - (cameraCorr - initCamerCorr);
+		
 			
 		//========================
 		//Find velocity
 		//========================	
-		//TODO
+		//Store the velocity into the  current index location
+		ptamsPos[ptamIdx] = workingPos;
+		ptamsTime[ptamIdx].sec  =  msg->header.stamp.sec;
+		ptamsTime[ptamIdx].nsec =  msg->header.stamp.nsec;
+		
+		//The velocity is found between the current position and the nth previous position. 
+		//Hence the next position in the storage vector will be n old.
+		int nextIdx = ptamIdx+1;
+		if(nextIdx  == ptamCount)
+		{
+			nextIdx = 0;
+		}
+		
+		//Find the velocity using latest measurements (only if the data is not identical)
+		if(ptamsPos[ptamIdx] != ptamsPos[nextIdx])
+		{
+			double dt = (double)(ptamsTime[ptamIdx]-ptamsTime[nextIdx]).toSec();
+			if(dt > 0.0)
+			{
+				TooN::Vector<3, double> temp_current = ptamsPos[ptamIdx];
+				TooN::Vector<3, double> temp_previous = ptamsPos[nextIdx];
+				TooN::Vector<3, double> tmp_vel = TooN::makeVector((temp_current[0]-temp_previous[0])/dt,
+				(temp_current[1]-temp_previous[1])/dt,
+				(temp_current[2]-temp_previous[2])/dt);
+			
+				//Store the velcocity (this is what the control reads from)
+				currentVel = tmp_vel;
+			}
+		}
+		
+		//Move along one stroage. If at the end then wrap.
+		ptamIdx++;
+		if(ptamIdx == ptamCount)
+		{
+			ptamIdx = 0; 
+		}
+
 
 		//========================
 		//Output
 		//========================
 		currentPos = workingPos;
-		//currentVel = ;
 		currentRot = workingRot;
 		currentEuler = krot::r_q_to_e(currentRot);
 		currentYaw = currentEuler[2];

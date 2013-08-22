@@ -166,12 +166,12 @@ int main(int argc, char **argv)
 			pub_vslam_ned.publish(vslam_ned);	
 			
 			geometry_msgs::Twist refer_ned;
-			vslam_ned.linear.x = referencePos[0];
-			vslam_ned.linear.y = referencePos[1];
-			vslam_ned.linear.z = referencePos[2];
-			vslam_ned.angular.x = 0.0;
-			vslam_ned.angular.y = 0.0;
-			vslam_ned.angular.z = referenceYaw;
+			refer_ned.linear.x = referencePos[0];
+			refer_ned.linear.y = referencePos[1];
+			refer_ned.linear.z = referencePos[2];
+			refer_ned.angular.x = 0.0;
+			refer_ned.angular.y = 0.0;
+			refer_ned.angular.z = referenceYaw;
 			pub_refer_ned.publish(refer_ned);
 		}
 

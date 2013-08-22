@@ -27,7 +27,10 @@ class ptam_data
 		//Storage for the initial PTAM pose
 		TooN::Vector<3, double> initPtamPos;
 		TooN::Vector<4, double> initPtamRot;
+		TooN::Vector<3, double> initCamerCorr;
+		TooN::Vector<3, double> cameraOffset;
 		int setPtamInit;
+		int setCameraCorr;
 
 		//Storage for the initial Vicon pose when PTAM inits. Store the inverse orientation for ease.
 		TooN::Vector<3, double> initViconPos;
@@ -44,6 +47,13 @@ class ptam_data
 
 		//Scale
 		double ptamScale;
+		
+		
+		//Storage for the last received ptam data
+		int ptamCount;
+		int ptamIdx;
+		TooN::Vector<3, double> * ptamsPos;
+		ros::Time * ptamsTime;
 };
 #endif
 //eof
