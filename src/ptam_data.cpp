@@ -27,7 +27,7 @@ ptam_data::ptam_data()
 
 	ptamScale = 1.0;
 	
-	ptamCount = 3;
+	ptamCount = 4;
 	ptamIdx = 0;
 	ptamsPos =  new TooN::Vector<3, double>[ptamCount];
 	ptamsTime = new ros::Time[ptamCount];

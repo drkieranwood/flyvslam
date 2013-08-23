@@ -234,7 +234,7 @@ int main(int argc, char **argv)
 		if (ptamInit==2 && scaleInit==2)
 		{
 			//Check if the PTAM data is close to the Vicon data (within 0.2m for x,y,z position)
-			double controlSwapTol = 0.2;
+			double controlSwapTol = 0.5;
 			if ( (PTAM_OK!=1) && ((fabs(viconPos[0]-ptamPos[0])) < controlSwapTol) && ((fabs(viconPos[1]-ptamPos[1])) < controlSwapTol) && ((fabs(viconPos[2]-ptamPos[2])) < controlSwapTol))
 			{
 					ROS_INFO("flyvslam::PTAM Control active");
@@ -257,13 +257,16 @@ int main(int argc, char **argv)
 			//but rate throttling for PTAM is achieved by not updating the PTAM pose quickly, and 
 			//checking if the data has changed between loops.
 			**************************************************************/
+			//HACK:: if ptam data is ok then replace the vicon data with it.
+			//This means the controler below will use the ptam data
+			viconPos = ptamPos;
+			viconVel = ptamVel;
+			viconYaw = ptamYaw;
 			
 			//Check for new PTAM data. If none then no cmd_vel is published.
 			if (1) 
 			{
-				
-				
-				
+
 			}		
 			
 		} //PTAM_OK==1
@@ -308,7 +311,7 @@ int main(int argc, char **argv)
 			//Limit to range [-1:1]
 			//NOTE: that TooN performs the dot product when multiplying two vectors.
 			double propGainXY = 0.5;
-			double diffGainXY = 0.5;
+			double diffGainXY = 0.1;
 			double norm_mag = std::max( -1.0 , std::min( 1.0 ,propGainXY*errMag -diffGainXY*(viconVel*errNorm) ) );
 			double tang_mag = std::max( -1.0 , std::min( 1.0 ,                  -diffGainXY*(viconVel*errTang) ) );
 			TooN::Vector<3, double> tmp_vel = errNorm*norm_mag + errTang*tang_mag;
