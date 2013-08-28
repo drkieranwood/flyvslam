@@ -350,10 +350,10 @@ int main(int argc, char **argv)
 			TooN::Vector<3, double> tmp_vel_drone = TooN::makeVector(tmp_vel*drone_axis_x,tmp_vel*drone_axis_y,0);
 			
 			
-			//Once the step has started only allow the MAV to move 4m in the y axis (revert once past zero in y)
+			//Once the step has started only allow the MAV to move 4m in the y axis (revert once past -2 in x)
 			if (stepOn==1)
 			{
-				if (viconPos[1] < 0.0)
+				if (viconPos[0] < -2.0)
 				{
 					stepOn=0;
 				}
@@ -374,7 +374,7 @@ int main(int argc, char **argv)
 				//This loop is broken further up when stepOn is set back to 0 and normal control resumes.
 				if(waypoint_info.currentIdx==10 || stepOn==1)
 				{
-					cmd_vel.linear.x = 0.3;
+					cmd_vel.linear.y = 0.4;
 					stepOn = 1;
 				}
 				pub_cmd_vel.publish(cmd_vel);	
