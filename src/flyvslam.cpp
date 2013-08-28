@@ -63,6 +63,7 @@ int main(int argc, char **argv)
 	int landingNow = 0;			//Flag to indicate the last waypoint has been reached and landing should occur. Can be used by other code to induce a landing at any time.
 	int ptamInit = 0;			//Flag to control the PTAM baseline initilisation. When complete this is set to 2.
 	int scaleInit = 0;			//Flag to control the PTAM scale initilisation. When complete this is set to 2.
+	int stepOn = 0;
 	
 	//Storage for sample values used to calculate the scale. 
 	TooN::Vector<3, double> ptamPos_one;
@@ -237,13 +238,14 @@ int main(int argc, char **argv)
 			double controlSwapTol = 0.5;
 			if ( (PTAM_OK!=1) && ((fabs(viconPos[0]-ptamPos[0])) < controlSwapTol) && ((fabs(viconPos[1]-ptamPos[1])) < controlSwapTol) && ((fabs(viconPos[2]-ptamPos[2])) < controlSwapTol))
 			{
-					ROS_INFO("flyvslam::PTAM Control active");
-					PTAM_OK = 1;
+					//ROS_INFO("flyvslam::PTAM Control active");
+					//PTAM OK never set at the moment. Hence it is always on Vicon only but with ptam still init'd.
+					PTAM_OK = 0;
 			}	
 			//If the ptam data diverges signifigantly from the Vicon then the Vicon control will take over.	
 			if ( (PTAM_OK==1) && !(((fabs(viconPos[0]-ptamPos[0])) < controlSwapTol) && ((fabs(viconPos[1]-ptamPos[1])) < controlSwapTol) && ((fabs(viconPos[2]-ptamPos[2])) < controlSwapTol)) )
 			{
-					ROS_INFO("flyvslam::PTAM Control inactive");
+					//ROS_INFO("flyvslam::PTAM Control inactive");
 					PTAM_OK = 0;
 			}
 		}
@@ -310,8 +312,10 @@ int main(int argc, char **argv)
 			//Find normal and tangential components needed to move MAV to target.
 			//Limit to range [-1:1]
 			//NOTE: that TooN performs the dot product when multiplying two vectors.
+			//Vicon P=0.5, D=0.5
+			//PTAM  P=0.5, D=0.1
 			double propGainXY = 0.5;
-			double diffGainXY = 0.1;
+			double diffGainXY = 0.5;
 			double norm_mag = std::max( -1.0 , std::min( 1.0 ,propGainXY*errMag -diffGainXY*(viconVel*errNorm) ) );
 			double tang_mag = std::max( -1.0 , std::min( 1.0 ,                  -diffGainXY*(viconVel*errTang) ) );
 			TooN::Vector<3, double> tmp_vel = errNorm*norm_mag + errTang*tang_mag;
@@ -344,6 +348,17 @@ int main(int argc, char **argv)
 			TooN::Vector<3, double> drone_axis_x  = TooN::makeVector(cos(viconYaw), sin(viconYaw),0); 
 			TooN::Vector<3, double> drone_axis_y  = TooN::makeVector(-sin(viconYaw), cos(viconYaw),0);
 			TooN::Vector<3, double> tmp_vel_drone = TooN::makeVector(tmp_vel*drone_axis_x,tmp_vel*drone_axis_y,0);
+			
+			
+			//Once the step has started only allow the MAV to move 4m in the y axis (revert once past zero in y)
+			if (stepOn==1)
+			{
+				if (viconPos[1] < 0.0)
+				{
+					stepOn=0;
+				}
+			}
+								
 
 			//Publish movement commands to drones ros topic.
 			//This is only performed if new Vicon data has been received in the last 1 second.
@@ -354,6 +369,14 @@ int main(int argc, char **argv)
 				cmd_vel.linear.y = (-1)*tmp_vel_drone[1];		//Axis negated to make NED
 				cmd_vel.linear.z = (-1)*tmp_Z_cmd;				//Axis negated to make NED
 				cmd_vel.angular.z = (-1)*angErr;				//Axis negated to make NED
+				
+				//If at the eleventh waypoint (idx==10) then set a control axis constant and latch by setting stepOn=1
+				//This loop is broken further up when stepOn is set back to 0 and normal control resumes.
+				if(waypoint_info.currentIdx==10 || stepOn==1)
+				{
+					cmd_vel.linear.x = 0.3;
+					stepOn = 1;
+				}
 				pub_cmd_vel.publish(cmd_vel);	
 			}
 			else
