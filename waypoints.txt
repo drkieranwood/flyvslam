@@ -30,10 +30,10 @@
 #Flight pattern
 #Move to other end an pause
 0.0 0.0 -1.0        0.0 -1000.0 0.0         15.0
-2.0 0.0 -1.0       0.0 -1000.0 0.0         10.0
+0.0 0.0 -1.0       0.0 -1000.0 0.0         10.0
 #Over 1 s move back to origin, the control will be manually set in this phase
-2.0 0.0 -1.0       0.0 -1000.0 0.0         1.0
--2.0 0.0 -1.0        0.0 -1000.0 0.0         20.0
+0.0 0.0 -1.0       0.0 -1000.0 0.0         1.0
+0.0 0.0 -1.0        0.0 -1000.0 0.0         20.0
 
 
 
