@@ -351,13 +351,13 @@ int main(int argc, char **argv)
 			
 			
 			//Once the step has started only allow the MAV to move to 2m altitude then swap back to vicon to land (z=-2.0)
-			if (stepOn==1)
-			{
-				if (viconYaw > 0 )
-				{
-					stepOn=0;
-				}
-			}
+//			if (stepOn==1)
+//			{
+//				if (viconYaw > 0 )
+//				{
+//					stepOn=0;
+//				}
+//			}
 								
 
 			//Publish movement commands to drones ros topic.
@@ -372,11 +372,11 @@ int main(int argc, char **argv)
 				
 				//If at the eleventh waypoint (idx==10) then set a control axis constant and latch by setting stepOn=1
 				//This loop is broken further up when stepOn is set back to 0 and normal control resumes.
-				if(waypoint_info.currentIdx==10 || stepOn==1)
-				{
-					cmd_vel.angular.z = -0.7;
-					stepOn = 1;
-				}
+//				if(waypoint_info.currentIdx==10 || stepOn==1)
+//				{
+//					cmd_vel.angular.z = -0.7;
+//					stepOn = 1;
+//				}
 				pub_cmd_vel.publish(cmd_vel);	
 			}
 			else
