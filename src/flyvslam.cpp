@@ -64,6 +64,8 @@ int main(int argc, char **argv)
 	int ptamInit = 0;			//Flag to control the PTAM baseline initilisation. When complete this is set to 2.
 	int scaleInit = 0;			//Flag to control the PTAM scale initilisation. When complete this is set to 2.
 	int stepOn = 0;
+	double ptamViconTol = 0.1;  //Toleracne between Vicon and PTAM positions
+	int ptamCheck = 0;
 	
 	//Storage for sample values used to calculate the scale. 
 	TooN::Vector<3, double> ptamPos_one;
@@ -223,6 +225,22 @@ int main(int argc, char **argv)
 			scaleInit = 2;
 		}
 		
+	    //If at the twelth waypoint (idx==11) then check if vicon and ptam are witin a tol. If not then break the loop and land
+		if((waypoint_info.currentIdx==11) && (ptamCheck==0))
+		{
+			ROS_INFO("flyvslam::Check PTAM vs Vicon");
+			//Find error between Vicon and ptam
+			TooN::Vector<3, double> tmpErr = ptamPos-viconPos;
+			//If the norm of the error is outside the tolerance then land
+			double tmpPosErrMag = TooN::norm(tmpErr);
+			if (tmpPosErrMag>ptamViconTol)
+			{
+				landingNow=1;
+			}
+			ptamCheck = 1;
+			ROS_INFO("flyvslam::err= %f",tmpPosErrMag);
+		}
+		
 		
 		/**************************************************************
 		//CONTROL SELECTION
@@ -240,7 +258,7 @@ int main(int argc, char **argv)
 			{
 					//ROS_INFO("flyvslam::PTAM Control active");
 					//PTAM OK never set at the moment. Hence it is always on Vicon only but with ptam still init'd.
-					PTAM_OK = 0;
+					PTAM_OK = 1;
 			}	
 			//If the ptam data diverges signifigantly from the Vicon then the Vicon control will take over.	
 			if ( (PTAM_OK==1) && !(((fabs(viconPos[0]-ptamPos[0])) < controlSwapTol) && ((fabs(viconPos[1]-ptamPos[1])) < controlSwapTol) && ((fabs(viconPos[2]-ptamPos[2])) < controlSwapTol)) )
@@ -314,8 +332,18 @@ int main(int argc, char **argv)
 			//NOTE: that TooN performs the dot product when multiplying two vectors.
 			//Vicon P=0.5, D=0.5
 			//PTAM  P=0.5, D=0.1
-			double propGainXY = 0.5;
-			double diffGainXY = 0.5;
+			double propGainXY;
+			double diffGainXY;
+			if (PTAM_OK==1)
+			{
+				propGainXY = 0.5;
+				diffGainXY = 0.1; 
+			}
+			else
+			{
+				propGainXY = 0.5;
+				diffGainXY = 0.5; 
+			}
 			double norm_mag = std::max( -1.0 , std::min( 1.0 ,propGainXY*errMag -diffGainXY*(viconVel*errNorm) ) );
 			double tang_mag = std::max( -1.0 , std::min( 1.0 ,                  -diffGainXY*(viconVel*errTang) ) );
 			TooN::Vector<3, double> tmp_vel = errNorm*norm_mag + errTang*tang_mag;
@@ -331,8 +359,20 @@ int main(int argc, char **argv)
 			//Z axis
 			//========================
 			//For Z only use the current Z velocity and Z error to form a simple PD control.
-			double propGainZ = 1.0;
-			double diffGainZ = 0.8;
+			//Vicon P=1.0, D=0.8
+			//PTAM  P=0.8, D=0.3
+			double propGainZ;
+			double diffGainZ;
+			if (PTAM_OK==1)
+			{
+				propGainZ = 0.8;
+				diffGainZ = 0.3; 
+			}
+			else
+			{
+				propGainXY = 1.0;
+				diffGainXY = 0.8; 
+			}
 			double diff_z = referencePos[2]-viconPos[2];
 			double tmp_Z_cmd = propGainZ*diff_z - diffGainZ*viconVel[2];
 			//Limit to +-1
@@ -362,7 +402,8 @@ int main(int argc, char **argv)
 
 			//Publish movement commands to drones ros topic.
 			//This is only performed if new Vicon data has been received in the last 1 second.
-			if( (1.0) > ((ros::Time::now()-(vicon_info.vicon_last_update_time)).toSec()) )
+			//if( (1.0) > ((ros::Time::now()-(vicon_info.vicon_last_update_time)).toSec()) )
+			if( 1.0 )
 			{
 				geometry_msgs::Twist cmd_vel;
 				cmd_vel.linear.x = tmp_vel_drone[0];

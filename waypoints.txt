@@ -7,36 +7,38 @@
 
 #Takeoff and stabilise at altitude 
 #(15s is enough time to get from most places in the arena)
-0.0 0.0 0.0         0.0 -1000.0 0.0         5.0
-0.0 0.0 -1.0        0.0 -1000.0 0.0         10.0
+-2.0 2.0 0.0         0.0 -1000.0 0.0         5.0
+-2.0 2.0 -1.0        0.0 -1000.0 0.0         10.0
 
 #Start ptam init. and move
-0.0 0.0 -1.0        0.0 -1000.0 0.0         10.0
+-2.0 2.0 -1.0        0.0 -1000.0 0.0         10.0
 
 #Stabilise at +1m offset and stop ptam init.
-1.0 0.0 -1.0        0.0 -1000.0 0.0         5.0
-1.0 0.0 -1.0        0.0 -1000.0 0.0         5.0
+0.0 2.0 -1.0        0.0 -1000.0 0.0         5.0
+0.0 2.0 -1.0        0.0 -1000.0 0.0         5.0
 
 #Grab position for scaling and move back
-1.0 0.0 -1.0        0.0 -1000.0 0.0         10.0
-0.0 0.0 -1.0        0.0 -1000.0 0.0         5.0
+0.0 2.0 -1.0        0.0 -1000.0 0.0         10.0
+-2.0 2.0 -1.0        0.0 -1000.0 0.0         5.0
 
 #Grab position for scaling
-0.0 0.0 -1.0        0.0 -1000.0 0.0         5.0
+-2.0 2.0 -1.0        0.0 -1000.0 0.0         5.0
 
 #At this point all initialisation has been completed, 
 #and a route of waypoints can be specified.
 
 #Flight pattern
-0.0 0.0 -1.0        0.0 -1000.0 0.0         5.0
-1.0 0.0 -1.0        0.0 -1000.0 0.0         5.0
-1.0 1.0 -1.5        0.0 -1000.0 0.0         5.0
--1.0 1.0 -1.5        0.0 -1000.0 0.0         5.0
-0.0 0.0 -1.0        0.0 -1000.0 0.0         15.0
+#Fly to end of arena
+-2.0 2.0 -1.0        0.0 -1000.0 0.0         20.0
+0.0 5.4 -1.0        0.0 -1000.0 0.0         10.0
+#Fly to side of arena
+-2.0 5.4 -1.0       0.0 -1000.0 0.0         10.0
+-2.0 5.4 -1.0       0.0 -1000.0 0.0         15.0
+#Ptam is checked again Vicon now if it is ok then waypoints continue
+-5.87 5.4 -1.0       0.0 -1000.0 0.0        10.0
+-2.0 5.4 -1.0       0.0 -1000.0 0.0         10.0
+0.0 0.0 -1.0       0.0 -1000.0 0.0          10.0
 
-0.0 0.0  -1.0        0.0 -1000.0 0.0         0.1
-0.0 -2.0 -1.0        0.0 -1000.0 0.0         5.0
-0.0 -2.0 -1.0        0.0 -1000.0 0.0         1.0
 
 
 #Land over 10s from 1m alt. at origin. (actually only descent to 0.2m alt. then land)
