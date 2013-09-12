@@ -64,7 +64,7 @@ int main(int argc, char **argv)
 	int ptamInit = 0;			//Flag to control the PTAM baseline initilisation. When complete this is set to 2.
 	int scaleInit = 0;			//Flag to control the PTAM scale initilisation. When complete this is set to 2.
 	int stepOn = 0;
-	double ptamViconTol = 0.1;  //Toleracne between Vicon and PTAM positions
+	double ptamViconTol = 0.2;  //Toleracne between Vicon and PTAM positions
 	int ptamCheck = 0;
 	
 	//Storage for sample values used to calculate the scale. 
@@ -225,7 +225,7 @@ int main(int argc, char **argv)
 			scaleInit = 2;
 		}
 		
-	    //If at the twelth waypoint (idx==11) then check if vicon and ptam are witin a tol. If not then break the loop and land
+	    //If at the twelth waypoint (idx==11) then check if vicon and ptam are within a tol. If not then break the loop and land
 		if((waypoint_info.currentIdx==11) && (ptamCheck==0))
 		{
 			ROS_INFO("flyvslam::Check PTAM vs Vicon");
@@ -256,18 +256,19 @@ int main(int argc, char **argv)
 			double controlSwapTol = 0.5;
 			if ( (PTAM_OK!=1) && ((fabs(viconPos[0]-ptamPos[0])) < controlSwapTol) && ((fabs(viconPos[1]-ptamPos[1])) < controlSwapTol) && ((fabs(viconPos[2]-ptamPos[2])) < controlSwapTol))
 			{
-					//ROS_INFO("flyvslam::PTAM Control active");
+					ROS_INFO("flyvslam::PTAM Control active");
 					//PTAM OK never set at the moment. Hence it is always on Vicon only but with ptam still init'd.
 					PTAM_OK = 1;
 			}	
 			//If the ptam data diverges signifigantly from the Vicon then the Vicon control will take over.	
+			/*
 			if ( (PTAM_OK==1) && !(((fabs(viconPos[0]-ptamPos[0])) < controlSwapTol) && ((fabs(viconPos[1]-ptamPos[1])) < controlSwapTol) && ((fabs(viconPos[2]-ptamPos[2])) < controlSwapTol)) )
 			{
-					//ROS_INFO("flyvslam::PTAM Control inactive");
+					ROS_INFO("flyvslam::PTAM Control inactive");
 					PTAM_OK = 0;
 			}
+			*/
 		}
-
 
 		if (PTAM_OK==1) //use PTAM controller. If inside the PTAM controller the PTAM_OK=0 flag is set, then the Vicon control will over-write.
 		{
