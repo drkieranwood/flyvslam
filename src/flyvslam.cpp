@@ -225,6 +225,7 @@ int main(int argc, char **argv)
 			scaleInit = 2;
 		}
 		
+		/*
 	    //If at the twelth waypoint (idx==11) then check if vicon and ptam are within a tol. If not then break the loop and land
 		if((waypoint_info.currentIdx==11) && (ptamCheck==0))
 		{
@@ -240,6 +241,7 @@ int main(int argc, char **argv)
 			ptamCheck = 1;
 			ROS_INFO("flyvslam::err= %f",tmpPosErrMag);
 		}
+		*/
 		
 		
 		/**************************************************************
@@ -248,16 +250,16 @@ int main(int argc, char **argv)
 		//based controller, else break into the emergency controller.
 		**************************************************************/
 		
+		
 		//Check if both the initilisations have been completed for PTAM. 
 		//Only think about activating PTAM control, once they are complete.
-		if (ptamInit==2 && scaleInit==2)
+		if (ptamInit==2 && scaleInit==2 && (0))  //This is not performed at the moment
 		{
 			//Check if the PTAM data is close to the Vicon data (within 0.2m for x,y,z position)
 			double controlSwapTol = 0.5;
 			if ( (PTAM_OK!=1) && ((fabs(viconPos[0]-ptamPos[0])) < controlSwapTol) && ((fabs(viconPos[1]-ptamPos[1])) < controlSwapTol) && ((fabs(viconPos[2]-ptamPos[2])) < controlSwapTol))
 			{
 					ROS_INFO("flyvslam::PTAM Control active");
-					//PTAM OK never set at the moment. Hence it is always on Vicon only but with ptam still init'd.
 					PTAM_OK = 1;
 			}	
 			//If the ptam data diverges signifigantly from the Vicon then the Vicon control will take over.	
@@ -269,6 +271,7 @@ int main(int argc, char **argv)
 			}
 			*/
 		}
+		
 
 		if (PTAM_OK==1) //use PTAM controller. If inside the PTAM controller the PTAM_OK=0 flag is set, then the Vicon control will over-write.
 		{
@@ -293,7 +296,6 @@ int main(int argc, char **argv)
 		} //PTAM_OK==1
 
 
-		//if (PTAM_OK==0) //then use safety controller
 		if (1)
 		{
 			/**************************************************************
@@ -389,36 +391,17 @@ int main(int argc, char **argv)
 			TooN::Vector<3, double> drone_axis_x  = TooN::makeVector(cos(viconYaw), sin(viconYaw),0); 
 			TooN::Vector<3, double> drone_axis_y  = TooN::makeVector(-sin(viconYaw), cos(viconYaw),0);
 			TooN::Vector<3, double> tmp_vel_drone = TooN::makeVector(tmp_vel*drone_axis_x,tmp_vel*drone_axis_y,0);
-			
-			
-			//Once the step has started only allow the MAV to move to 2m altitude then swap back to vicon to land (z=-2.0)
-//			if (stepOn==1)
-//			{
-//				if (viconYaw > 0 )
-//				{
-//					stepOn=0;
-//				}
-//			}
-								
+									
 
 			//Publish movement commands to drones ros topic.
 			//This is only performed if new Vicon data has been received in the last 1 second.
-			//if( (1.0) > ((ros::Time::now()-(vicon_info.vicon_last_update_time)).toSec()) )
-			if( 1.0 )
+			if( (1.0) > ((ros::Time::now()-(vicon_info.vicon_last_update_time)).toSec()) )
 			{
 				geometry_msgs::Twist cmd_vel;
 				cmd_vel.linear.x = tmp_vel_drone[0];
 				cmd_vel.linear.y = (-1)*tmp_vel_drone[1];		//Axis negated to make NED
 				cmd_vel.linear.z = (-1)*tmp_Z_cmd;				//Axis negated to make NED
 				cmd_vel.angular.z = (-1)*angErr;				//Axis negated to make NED
-				
-				//If at the eleventh waypoint (idx==10) then set a control axis constant and latch by setting stepOn=1
-				//This loop is broken further up when stepOn is set back to 0 and normal control resumes.
-//				if(waypoint_info.currentIdx==10 || stepOn==1)
-//				{
-//					cmd_vel.angular.z = -0.7;
-//					stepOn = 1;
-//				}
 				pub_cmd_vel.publish(cmd_vel);	
 			}
 			else
@@ -433,7 +416,7 @@ int main(int argc, char **argv)
 				pub_cmd_vel.publish(cmd_vel);	
 			}
 			
-		} //PTAM_OK==0
+		}
 		
 		/**************************************************************
 		//CHECK STATUS' 
