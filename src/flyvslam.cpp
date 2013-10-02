@@ -19,7 +19,9 @@
 #include <flyvslam/waypoint_data.h>
 #include <flyvslam/vicon_data.h>
 #include <flyvslam/ptam_data.h>
+#include <flyvslam/lqg_control.h>
 #include <r_wrap_pi.h>
+#include <r_e_to_q.h>
 #define PI 3.14159265358979323846
 
 
@@ -41,6 +43,7 @@ int main(int argc, char **argv)
 	//=========================
 	//Objects and variables
 	//=========================
+	int ptamControlOn = 0;
 	
 	//Create objects to store and handle vicon, ptam, and waypoint data.
 	vicon_data vicon_info;
@@ -72,6 +75,13 @@ int main(int argc, char **argv)
 	TooN::Vector<3, double> ptamPos_two;
 	TooN::Vector<3, double> viconPos_one;
 	TooN::Vector<3, double> viconPos_two;
+	
+	//The average roll and pitch and count of included measurements
+	double avgRoll  = 0.0;
+	double avgPitch = 0.0;
+	int avgCount = 0;
+	//This is to check if the current ptam output has not changed since the last loop.
+	TooN::Vector<3, double> ptamCheckPos = TooN::makeVector(0.0,0.0,0.0);
 
 	
 	//=========================
@@ -100,6 +110,9 @@ int main(int argc, char **argv)
 	ros::Publisher  pub_vicon_ned = n.advertise<geometry_msgs::Twist>("/vicon_ned", 1);
 	ros::Publisher  pub_vslam_ned = n.advertise<geometry_msgs::Twist>("/vslam_ned", 1);
 	ros::Publisher  pub_refer_ned = n.advertise<geometry_msgs::Twist>("/refer_ned", 1);
+	
+	ros::Publisher  pub_vicon_vel = n.advertise<geometry_msgs::Twist>("/vicon_vel", 1);
+	ros::Publisher  pub_vslam_vel = n.advertise<geometry_msgs::Twist>("/vslam_vel", 1);
 
 
 	//=========================
@@ -166,7 +179,7 @@ int main(int argc, char **argv)
 			vslam_ned.angular.x = ptam_info.currentEuler[0];
 			vslam_ned.angular.y = ptam_info.currentEuler[1];
 			vslam_ned.angular.z = ptam_info.currentEuler[2];
-			pub_vslam_ned.publish(vslam_ned);	
+			pub_vslam_ned.publish(vslam_ned);
 			
 			geometry_msgs::Twist refer_ned;
 			refer_ned.linear.x = referencePos[0];
@@ -176,6 +189,28 @@ int main(int argc, char **argv)
 			refer_ned.angular.y = 0.0;
 			refer_ned.angular.z = referenceYaw;
 			pub_refer_ned.publish(refer_ned);
+			
+			if (0)
+			{
+				geometry_msgs::Twist vicon_vel;
+				vicon_vel.linear.x = viconVel[0];
+				vicon_vel.linear.y = viconVel[1];
+				vicon_vel.linear.z = viconVel[2];
+				vicon_vel.angular.x = 0.0;
+				vicon_vel.angular.y = 0.0;
+				vicon_vel.angular.z = 0.0;
+				pub_vicon_vel.publish(vicon_vel);
+				
+				geometry_msgs::Twist vslam_vel;
+				vslam_vel.linear.x = ptamVel[0];
+				vslam_vel.linear.y = ptamVel[1];
+				vslam_vel.linear.z = ptamVel[2];
+				vslam_vel.angular.x = 0.0;
+				vslam_vel.angular.y = 0.0;
+				vslam_vel.angular.z = 0.0;
+				pub_vslam_vel.publish(vslam_vel);
+			}
+			
 		}
 
 		/**************************************************************
@@ -202,6 +237,14 @@ int main(int argc, char **argv)
 			pub_ptaminit.publish(initCmd);
 			//Set the initial Vicon pose for the PTAM to NED transformation.
 			ptam_info.setInitVicon(vicon_info.currentPos,vicon_info.currentRot);
+			ROS_INFO("flyvslam::initViconPos: %4.2f,%4.2f,%4.2f",vicon_info.currentPos[0],vicon_info.currentPos[1],vicon_info.currentPos[2]);
+			ROS_INFO("flyvslam::initViconRot: %4.2f,%4.2f,%4.2f,%4.2f",vicon_info.currentRot[0],vicon_info.currentRot[1],vicon_info.currentRot[2],vicon_info.currentRot[3]);
+			//Set a blank pose correction (the altitude is correct though).
+			//This overwrites the one set by the setinitVicon() above.
+			TooN::Vector<3,double> initPosTemp = TooN::makeVector(1.0, 0.0,-1.0);
+			TooN::Vector<4,double> initRotTemp = TooN::makeVector(1.0,0.0,0.0,0.0);
+			ROS_INFO("flyvslam::initAvgPos: %4.2f,%4.2f,%4.2f",initPosTemp[0],initPosTemp[1],initPosTemp[2]);
+			//ptam_info.setInitGround(initPosTemp,initRotTemp);
 			ptamInit = 2;
 		}	
 		//If at the sixth waypoint (idx==5) then start the scaling movement.
@@ -244,6 +287,37 @@ int main(int argc, char **argv)
 		*/
 		
 		
+		//Once the ptam init has been completed create an
+		//average roll and pitch output of PTAM. Turn this into a 
+		//quaternion and send to the ptam correction.
+		if (ptamInit==2 && avgCount<50)
+		{
+			if ( ptamCheckPos != ptamPos)
+			{
+				//Extract the roll and pitch from ptam
+				double tmpRoll  = ptam_info.currentEuler[0];
+				double tmpPitch = ptam_info.currentEuler[1];
+				
+				avgRoll   = ((avgRoll*avgCount)  + tmpRoll) /(avgCount+1.0);
+				avgPitch  = ((avgPitch*avgCount) + tmpPitch)/(avgCount+1.0);
+				avgCount = avgCount + 1;
+			
+				TooN::Vector<4,double> tempQuat = krot::r_e_to_q( TooN::makeVector( avgRoll,avgPitch,-1.5708 ) );
+				if (avgCount == 49)
+				{
+					
+					ROS_INFO("flyvslam::initAvgRot: %4.2f,%4.2f,%4.2f,%4.2f",tempQuat[0],tempQuat[1],tempQuat[2],tempQuat[3]);
+				}
+				
+				//ptam_info.setGroundOrientation(tempQuat);
+				
+				ptamCheckPos = ptamPos;
+			}
+		}
+
+		
+		
+		
 		/**************************************************************
 		//CONTROL SELECTION
 		//check if the PTAM data is near the Vicon data, if so then use the PTAM
@@ -253,7 +327,7 @@ int main(int argc, char **argv)
 		
 		//Check if both the initilisations have been completed for PTAM. 
 		//Only think about activating PTAM control, once they are complete.
-		if (ptamInit==2 && scaleInit==2 && (0))  //This is not performed at the moment
+		if (ptamInit==2 && scaleInit==2 && (ptamControlOn))
 		{
 			//Check if the PTAM data is close to the Vicon data (within 0.2m for x,y,z position)
 			double controlSwapTol = 0.5;
@@ -373,8 +447,8 @@ int main(int argc, char **argv)
 			}
 			else
 			{
-				propGainXY = 1.0;
-				diffGainXY = 0.8; 
+				propGainZ = 1.0;
+				diffGainZ = 0.8; 
 			}
 			double diff_z = referencePos[2]-viconPos[2];
 			double tmp_Z_cmd = propGainZ*diff_z - diffGainZ*viconVel[2];
@@ -437,27 +511,30 @@ int main(int argc, char **argv)
 		
 	} 
 
-	//After main flight loop need to land and shut down
-	sleepone.sleep();
-	ROS_INFO("flyvslam::LANDING");
+	if (ros::ok())
 	{
-		std_msgs::Empty tempMsg;
-
-		pub_land.publish(tempMsg);
-		ros::spinOnce();
+		//After main flight loop need to land and shut down
 		sleepone.sleep();
+		ROS_INFO("flyvslam::LANDING");
+		{
+			std_msgs::Empty tempMsg;
 
-		pub_land.publish(tempMsg);
-		ros::spinOnce();
-		sleepone.sleep();
+			pub_land.publish(tempMsg);
+			ros::spinOnce();
+			sleepone.sleep();
 
-		pub_land.publish(tempMsg);
-		ros::spinOnce();
-		sleepone.sleep();
+			pub_land.publish(tempMsg);
+			ros::spinOnce();
+			sleepone.sleep();
+
+			pub_land.publish(tempMsg);
+			ros::spinOnce();
+			sleepone.sleep();
+		}
 	}
-
 
 	ROS_INFO("flyvslam::End flight script.");
   	return 0;
 }
+
 //eof

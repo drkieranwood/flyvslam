@@ -7,6 +7,8 @@
 
 #include <flyvslam/waypoint_data.h>
 #include <flyvslam/vicon_data.h>
+#include <flyvslam/ptam_data.h>
+#include <flyvslam/lqg_control.h>
 
 
 
