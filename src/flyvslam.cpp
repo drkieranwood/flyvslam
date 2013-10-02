@@ -253,7 +253,7 @@ int main(int argc, char **argv)
 		
 		//Check if both the initilisations have been completed for PTAM. 
 		//Only think about activating PTAM control, once they are complete.
-		if (ptamInit==2 && scaleInit==2 && (0))  //This is not performed at the moment
+		if (ptamInit==2 && scaleInit==2 )  //This is not performed at the moment
 		{
 			//Check if the PTAM data is close to the Vicon data (within 0.2m for x,y,z position)
 			double controlSwapTol = 0.5;
@@ -395,7 +395,8 @@ int main(int argc, char **argv)
 
 			//Publish movement commands to drones ros topic.
 			//This is only performed if new Vicon data has been received in the last 1 second.
-			if( (1.0) > ((ros::Time::now()-(vicon_info.vicon_last_update_time)).toSec()) )
+			//if( (1.0) > ((ros::Time::now()-(vicon_info.vicon_last_update_time)).toSec()) )
+			if (1)				
 			{
 				geometry_msgs::Twist cmd_vel;
 				cmd_vel.linear.x = tmp_vel_drone[0];
