@@ -5,6 +5,9 @@
 #include <r_q_to_e.h>
 #include <r_e_to_q.h>
 
+
+//========================
+//========================
 //Constructor.
 ptam_data::ptam_data()
 {
@@ -45,7 +48,8 @@ ptam_data::ptam_data()
 }
 
 
-
+//========================
+//========================
 //Extract the current position and yaw from the ptam message and update the velocity. 
 void ptam_data::update(const geometry_msgs::PoseWithCovarianceStampedConstPtr& msg)
 {
@@ -54,11 +58,8 @@ void ptam_data::update(const geometry_msgs::PoseWithCovarianceStampedConstPtr& m
 	{
 		initPtamPos = TooN::makeVector(msg->pose.pose.position.x,msg->pose.pose.position.y,msg->pose.pose.position.z);
 		initPtamRot = TooN::makeVector(msg->pose.pose.orientation.w,msg->pose.pose.orientation.x,msg->pose.pose.orientation.y,msg->pose.pose.orientation.z);
-		
-		//Check the quaternion is valid and normalise.
 		krot::r_check_q(initPtamRot);
-		
-		setPtamInit = 1;
+		setPtamInit=1;
 	}
 
 
@@ -109,7 +110,9 @@ void ptam_data::update(const geometry_msgs::PoseWithCovarianceStampedConstPtr& m
 		workingRot = krot::r_multi_q(initPtamRot,workingRot);
 		//Swap axes order
 		workingRot = TooN::makeVector(workingRot[0],workingRot[3],workingRot[1],workingRot[2]);
-		//Add initial ground truth orientation
+		//Add initial ground truth orientation.
+		//NOTE: groundOrientation can be provded by Vicon or by the averaging method.
+		//if Vicon then the quaternion is applied 
 		workingRot = krot::r_multi_q(groundOrientation,workingRot);
 		krot::r_check_q(workingRot);
 
@@ -217,7 +220,8 @@ void ptam_data::update(const geometry_msgs::PoseWithCovarianceStampedConstPtr& m
 }
 
 
-
+//========================
+//========================
 //Set the intial Vicon position when PTAM was initialised.
 void ptam_data::setInitVicon(TooN::Vector<3, double> initPos,TooN::Vector<4, double> initRot)
 {
@@ -243,7 +247,8 @@ void ptam_data::setInitVicon(TooN::Vector<3, double> initPos,TooN::Vector<4, dou
 }
 
 
-
+//========================
+//========================
 //Set the PTAM scale. It is initialised to 1.0.
 void ptam_data::setPtamScale(double scaleTemp)
 {
@@ -251,6 +256,8 @@ void ptam_data::setPtamScale(double scaleTemp)
 }
 
 
+//========================
+//========================
 //Set the pose correction. Ground thruth position and orientation.
 void ptam_data::setInitGround(TooN::Vector<3, double> tempPos,TooN::Vector<4, double> tempRot)
 {
@@ -266,6 +273,9 @@ void ptam_data::setInitGround(TooN::Vector<3, double> tempPos,TooN::Vector<4, do
 	setGroundInit = 1;
 }
 
+
+//========================
+//========================
 //Set the ground orientation correction. Can be called during a flight.
 void ptam_data::setGroundOrientation(TooN::Vector<4, double> tempRot)
 {
@@ -278,8 +288,6 @@ void ptam_data::setGroundOrientation(TooN::Vector<4, double> tempRot)
 	
 	ROS_INFO("flyvslam::quat1:%5.2f,quat2:%5.2f,quat3:%5.2f,quat4:%5.2f",groundOrientation[0],groundOrientation[1],groundOrientation[2],groundOrientation[3]);
 }
-
-
 
 
 //eof

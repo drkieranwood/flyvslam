@@ -49,6 +49,58 @@ int main(int argc, char **argv)
 	vicon_data vicon_info;
 	ptam_data ptam_info;
 	waypoint_data waypoint_info;
+	
+	//Create control objects for X,Y,Z,W(yaw)
+	//Note the LQG is applied using the H2 method since it creates a 
+	//single state-space controller.
+	lqg_control controlX;
+	lqg_control controlY;
+	lqg_control controlZ;
+	lqg_control controlW;
+	
+	//Set the matrices for the controllers. 
+	//Temporary matrices need to be created in order to set the rows and columns.
+	{
+		TooN::Matrix<3,3,double> tempMatA =  TooN::data(0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0);
+		controlX.setA = tempMatA;
+		TooN::Matrix<3,1,double> tempMatB =  TooN::data(0.0,0.0,0.0);
+		controlX.setB = tempMatB;
+		TooN::Matrix<1,3,double> tempMatC =  TooN::data(0.0,0.0,0.0);
+		controlX.setC = tempMatC;
+		TooN::Matrix<1,1,double> tempMatD =  TooN::data(0.0);
+		controlX.setD = tempMatD;
+	}
+	{
+		TooN::Matrix<3,3,double> tempMatA =  TooN::data(0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0);
+		controlY.setA = tempMatA;
+		TooN::Matrix<3,1,double> tempMatB =  TooN::data(0.0,0.0,0.0);
+		controlY.setB = tempMatB;
+		TooN::Matrix<1,3,double> tempMatC =  TooN::data(0.0,0.0,0.0);
+		controlY.setC = tempMatC;
+		TooN::Matrix<1,1,double> tempMatD =  TooN::data(0.0);
+		controlY.setD = tempMatD;
+	}
+	{
+		TooN::Matrix<3,3,double> tempMatA =  TooN::data(0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0);
+		controlZ.setA = tempMatA;
+		TooN::Matrix<3,1,double> tempMatB =  TooN::data(0.0,0.0,0.0);
+		controlZ.setB = tempMatB;
+		TooN::Matrix<1,3,double> tempMatC =  TooN::data(0.0,0.0,0.0);
+		controlZ.setC = tempMatC;
+		TooN::Matrix<1,1,double> tempMatD =  TooN::data(0.0);
+		controlZ.setD = tempMatD;
+	}
+	{
+		TooN::Matrix<3,3,double> tempMatA =  TooN::data(0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0);
+		controlX.setW = tempMatA;
+		TooN::Matrix<3,1,double> tempMatB =  TooN::data(0.0,0.0,0.0);
+		controlX.setW = tempMatB;
+		TooN::Matrix<1,3,double> tempMatC =  TooN::data(0.0,0.0,0.0);
+		controlX.setW = tempMatC;
+		TooN::Matrix<1,1,double> tempMatD =  TooN::data(0.0);
+		controlX.setW = tempMatD;
+	}
+	
 
 	//Some helpful variables. These just extract and store a direct copy of data available in 
 	//the vicon, ptam, and waypoint objects, to make the later code look cleaner.
@@ -239,12 +291,13 @@ int main(int argc, char **argv)
 			ptam_info.setInitVicon(vicon_info.currentPos,vicon_info.currentRot);
 			ROS_INFO("flyvslam::initViconPos: %4.2f,%4.2f,%4.2f",vicon_info.currentPos[0],vicon_info.currentPos[1],vicon_info.currentPos[2]);
 			ROS_INFO("flyvslam::initViconRot: %4.2f,%4.2f,%4.2f,%4.2f",vicon_info.currentRot[0],vicon_info.currentRot[1],vicon_info.currentRot[2],vicon_info.currentRot[3]);
-			//Set a blank pose correction (the altitude is correct though).
+			//Set a manual pose correction. The orientation correction is set to do nothing at the moment. 
+			//Hence the orientation output will be in the camera frame.
 			//This overwrites the one set by the setinitVicon() above.
 			TooN::Vector<3,double> initPosTemp = TooN::makeVector(1.0, 0.0,-1.0);
 			TooN::Vector<4,double> initRotTemp = TooN::makeVector(1.0,0.0,0.0,0.0);
 			ROS_INFO("flyvslam::initAvgPos: %4.2f,%4.2f,%4.2f",initPosTemp[0],initPosTemp[1],initPosTemp[2]);
-			//ptam_info.setInitGround(initPosTemp,initRotTemp);
+			ptam_info.setInitGround(initPosTemp,initRotTemp);
 			ptamInit = 2;
 		}	
 		//If at the sixth waypoint (idx==5) then start the scaling movement.
@@ -303,14 +356,13 @@ int main(int argc, char **argv)
 				avgCount = avgCount + 1;
 			
 				TooN::Vector<4,double> tempQuat = krot::r_e_to_q( TooN::makeVector( avgRoll,avgPitch,-1.5708 ) );
-				if (avgCount == 49)
+				if (avgCount == 50)
 				{
-					
+					//Only set the correction after the average has been created.
 					ROS_INFO("flyvslam::initAvgRot: %4.2f,%4.2f,%4.2f,%4.2f",tempQuat[0],tempQuat[1],tempQuat[2],tempQuat[3]);
+					ptam_info.setGroundOrientation(tempQuat);
 				}
-				
-				//ptam_info.setGroundOrientation(tempQuat);
-				
+								
 				ptamCheckPos = ptamPos;
 			}
 		}
@@ -489,6 +541,21 @@ int main(int argc, char **argv)
 				cmd_vel.angular.z = 0;
 				pub_cmd_vel.publish(cmd_vel);	
 			}
+			
+		}
+		else if ()
+		{
+			/**************************************************************
+			//LQG/H2 Control
+			//this uses the LQG/H2 optimal controller as a set of state-space 
+			//matrices which are updated once per-loop.
+			**************************************************************/
+			
+			
+		}
+		else
+		{
+			
 			
 		}
 		

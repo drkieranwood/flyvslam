@@ -4,10 +4,10 @@ lqg_control::lqg_control()
 {
 	//The default system is a SISO pass-through. i.e the system has no
 	//dynamics and outputs the input immidiately.
-	matA = data(0.0);
-	matB = data(1.0);
-	matC = data(0.0);
-	matD = data(1.0);
+	matA = TooN::data(0.0);
+	matB = TooN::data(1.0);
+	matC = TooN::data(0.0);
+	matD = TooN::data(1.0);
 	
 	currentState  = TooN::makeVector(0.0);
     currentInput  = TooN::makeVector(0.0);
