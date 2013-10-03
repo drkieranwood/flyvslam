@@ -275,6 +275,7 @@ int main(int argc, char **argv)
 	int stepOn = 0;
 	double ptamViconTol = 0.2;  //Toleracne between Vicon and PTAM positions
 	int ptamCheck = 0;
+	int takeOffInit = 0;
 	
 	//Storage for sample values used to calculate the scale. 
 	TooN::Vector<3, double> ptamPos_one;
@@ -456,7 +457,7 @@ int main(int argc, char **argv)
 				//Set a manual pose correction. The orientation correction is set to do nothing at the moment. 
 				//Hence the orientation output will be in the camera frame.
 				//This overwrites the one set by the setinitVicon() above.
-				TooN::Vector<3,double> initPosTemp = TooN::makeVector(1.0,-0.195,-1.0);
+				TooN::Vector<3,double> initPosTemp = TooN::makeVector(0.5,-0.195,-1.0);
 				TooN::Vector<4,double> initRotTemp = TooN::makeVector(1.0,0.0,0.0,0.0);
 				ptam_info.setInitGround(initPosTemp,initRotTemp);
 			}
@@ -489,7 +490,10 @@ int main(int argc, char **argv)
 				ptam_info.setPtamScale(double(2.0/ptamDist));
 			}
 			scaleInit = 2;
-			
+		}
+	    //If at the ninth waypoint (idx==8) then takeoff.
+		if((waypoint_info.currentIdx==8) && (takeOffInit==0))
+		{
 			//If using the averaging method then this is the time to takeoff.
 			if (avgRollPitchCorr_on==1)
 			{
@@ -499,28 +503,10 @@ int main(int argc, char **argv)
 					pub_takeoff.publish(tempMsg);
 				}
 			}
+			takeOffInit = 1;
 		}
-		
 
-		/*
-	    //If at the twelth waypoint (idx==11) then check if vicon and ptam are within a tol. If not then break the loop and land
-		if((waypoint_info.currentIdx==11) && (ptamCheck==0))
-		{
-			ROS_INFO("flyvslam::Check PTAM vs Vicon");
-			//Find error between Vicon and ptam
-			TooN::Vector<3, double> tmpErr = ptamPos-viconPos;
-			//If the norm of the error is outside the tolerance then land
-			double tmpPosErrMag = TooN::norm(tmpErr);
-			if (tmpPosErrMag>ptamViconTol)
-			{
-				landingNow=1;
-			}
-			ptamCheck = 1;
-			ROS_INFO("flyvslam::err= %f",tmpPosErrMag);
-		}
-		*/
-		
-		
+	
 		//Once the ptam init has been completed create an
 		//average roll and pitch output of PTAM. Turn this into a 
 		//quaternion and send to the ptam correction.
@@ -551,36 +537,22 @@ int main(int argc, char **argv)
 		}
 		
 		
-		
-		
 		/**************************************************************
 		//CONTROL SELECTION
 		//check if the PTAM data is near the Vicon data, if so then use the PTAM
 		//based controller, else break into the emergency controller.
 		**************************************************************/
 		
-		
 		//Check if both the initilisations have been completed for PTAM. 
 		//Only think about activating PTAM control, once they are complete.
 		if (ptamInit==2 && scaleInit==2 && (ptamControlOn))
 		{
-			//Check if the PTAM data is close to the Vicon data (within 0.2m for x,y,z position)
-			double controlSwapTol = 0.5;
-			if ( (PTAM_OK!=1) && ((fabs(viconPos[0]-ptamPos[0])) < controlSwapTol) && ((fabs(viconPos[1]-ptamPos[1])) < controlSwapTol) && ((fabs(viconPos[2]-ptamPos[2])) < controlSwapTol))
+			if (PTAM_OK!=1)
 			{
 					ROS_INFO("flyvslam::PTAM Control active");
 					PTAM_OK = 1;
 			}	
-			//If the ptam data diverges signifigantly from the Vicon then the Vicon control will take over.	
-			/*
-			if ( (PTAM_OK==1) && !(((fabs(viconPos[0]-ptamPos[0])) < controlSwapTol) && ((fabs(viconPos[1]-ptamPos[1])) < controlSwapTol) && ((fabs(viconPos[2]-ptamPos[2])) < controlSwapTol)) )
-			{
-					ROS_INFO("flyvslam::PTAM Control inactive");
-					PTAM_OK = 0;
-			}
-			*/
 		}
-		
 
 		if (PTAM_OK==1) //use PTAM controller. If inside the PTAM controller the PTAM_OK=0 flag is set, then the Vicon control will over-write.
 		{
@@ -596,12 +568,6 @@ int main(int argc, char **argv)
 			viconVel = ptamVel;
 			viconYaw = ptamYaw;
 			viconRot = ptamRot;
-			
-			//Check for new PTAM data. If none then no cmd_vel is published.
-			if (1) 
-			{
-
-			}		
 			
 		} //PTAM_OK==1
 
@@ -649,7 +615,7 @@ int main(int argc, char **argv)
 			double diffGainXY;
 			if (PTAM_OK==1)
 			{
-				propGainXY = 0.5;
+				propGainXY = 0.3;
 				diffGainXY = 0.1; 
 			}
 			else
@@ -701,29 +667,41 @@ int main(int argc, char **argv)
 			TooN::Vector<3, double> drone_axis_x  = TooN::makeVector(cos(viconYaw), sin(viconYaw),0); 
 			TooN::Vector<3, double> drone_axis_y  = TooN::makeVector(-sin(viconYaw), cos(viconYaw),0);
 			TooN::Vector<3, double> tmp_vel_drone = TooN::makeVector(tmp_vel*drone_axis_x,tmp_vel*drone_axis_y,0);
-									
-
-			//Publish movement commands to drones ros topic.
-			//This is only performed if new Vicon data has been received in the last 1 second.
-			if( (1.0) > ((ros::Time::now()-(vicon_info.vicon_last_update_time)).toSec()) )
+				
+			if (ptamControlOn==0)
+			{					
+				//Publish movement commands to drones ros topic.
+				//This is only performed if new Vicon data has been received in the last 1 second.
+				if( (1.0) > ((ros::Time::now()-(vicon_info.vicon_last_update_time)).toSec()) )
+				{
+					geometry_msgs::Twist cmd_vel;
+					cmd_vel.linear.x = tmp_vel_drone[0];
+					cmd_vel.linear.y = (-1)*tmp_vel_drone[1];		//Axis negated to make NED
+					cmd_vel.linear.z = (-1)*tmp_Z_cmd;				//Axis negated to make NED
+					cmd_vel.angular.z = (-1)*angErr;				//Axis negated to make NED
+					pub_cmd_vel.publish(cmd_vel);	
+				}
+				else
+				{
+					//Else no new Vicon data is available so send zeros
+					ROS_INFO("flyvslam::No new Vicon data or nan error. Sending [0,0,0,0]' vel_cmd");
+					geometry_msgs::Twist cmd_vel;
+					cmd_vel.linear.x = 0;
+					cmd_vel.linear.y = 0;
+					cmd_vel.linear.z = 0;
+					cmd_vel.angular.z = 0;
+					pub_cmd_vel.publish(cmd_vel);	
+				}
+			}
+			else
 			{
+				//If using ptam control then always publish the command
 				geometry_msgs::Twist cmd_vel;
 				cmd_vel.linear.x = tmp_vel_drone[0];
 				cmd_vel.linear.y = (-1)*tmp_vel_drone[1];		//Axis negated to make NED
 				cmd_vel.linear.z = (-1)*tmp_Z_cmd;				//Axis negated to make NED
 				cmd_vel.angular.z = (-1)*angErr;				//Axis negated to make NED
-				pub_cmd_vel.publish(cmd_vel);	
-			}
-			else
-			{
-				//Else no new Vicon data is available so send zeros
-				ROS_INFO("flyvslam::No new Vicon data or nan error. Sending [0,0,0,0]' vel_cmd");
-				geometry_msgs::Twist cmd_vel;
-				cmd_vel.linear.x = 0;
-				cmd_vel.linear.y = 0;
-				cmd_vel.linear.z = 0;
-				cmd_vel.angular.z = 0;
-				pub_cmd_vel.publish(cmd_vel);	
+				pub_cmd_vel.publish(cmd_vel);		
 			}
 			
 		}
