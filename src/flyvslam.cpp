@@ -23,6 +23,7 @@
 #include <flyvslam/lqg_control.h>
 #include <r_wrap_pi.h>
 #include <r_e_to_q.h>
+#include <r_apply_q.h>
 #define PI 3.14159265358979323846
 
 
@@ -44,7 +45,8 @@ int main(int argc, char **argv)
 	//=========================
 	//Objects and variables
 	//=========================
-	int ptamControlOn = 0;
+	int ptamControlOn = 1;
+	int avgRollPitchCorr_on = 1;
 	int LQG_OK=0;
 	
 	//Create objects to store and handle vicon, ptam, and waypoint data.
@@ -59,10 +61,23 @@ int main(int argc, char **argv)
 	int sX=2;
 	int iX=1;
 	int oX=1;
+	
+	int sY=2;
+	int iY=1;
+	int oY=1;
+	
+	int sZ=2;
+	int iZ=1;
+	int oZ=1;
+	
+	int sW=2;
+	int iW=1;
+	int oW=1;
+	
 	lqg_control controlX(sX,iX,oX);
-	//lqg_control controlY();
-	//lqg_control controlZ();
-	//lqg_control controlW();
+	lqg_control controlY(sY,iY,oY);
+	lqg_control controlZ(sZ,iZ,oZ);
+	lqg_control controlW(sW,iW,oW);
 	
 	//Set the matrices for the controllers. 
 	//Temporary matrices need to be created in order to set the rows and columns.
@@ -88,6 +103,78 @@ int main(int argc, char **argv)
 		tempMatD(0,0) = 0.0;
 		controlX.setD(tempMatD);
 	}
+	
+	{
+		TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempMatA(sY,sY);
+		tempMatA(0,0) = 0.0;
+		tempMatA(0,1) = 0.0;
+		tempMatA(1,0) = 1.0;
+		tempMatA(1,1) = 0.0;
+		controlY.setA(tempMatA);
+		
+		TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempMatB(sY,iY);
+		tempMatB(0,0) = 1.0;
+		tempMatB(1,0) = 0.0;
+		controlY.setB(tempMatB);
+		
+		TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempMatC(oY,sY);
+		tempMatC(0,0) = 0.0;
+		tempMatC(0,1) = 1.0;
+		controlY.setC(tempMatC);
+		
+		TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempMatD(oY,iY);
+		tempMatD(0,0) = 0.0;
+		controlY.setD(tempMatD);
+	}
+	
+	{
+		TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempMatA(sZ,sZ);
+		tempMatA(0,0) = 0.0;
+		tempMatA(0,1) = 0.0;
+		tempMatA(1,0) = 1.0;
+		tempMatA(1,1) = 0.0;
+		controlZ.setA(tempMatA);
+		
+		TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempMatB(sZ,iZ);
+		tempMatB(0,0) = 1.0;
+		tempMatB(1,0) = 0.0;
+		controlZ.setB(tempMatB);
+		
+		TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempMatC(oZ,sZ);
+		tempMatC(0,0) = 0.0;
+		tempMatC(0,1) = 1.0;
+		controlZ.setC(tempMatC);
+		
+		TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempMatD(oZ,iZ);
+		tempMatD(0,0) = 0.0;
+		controlZ.setD(tempMatD);
+	}
+	
+	
+	{
+		TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempMatA(sW,sW);
+		tempMatA(0,0) = 0.0;
+		tempMatA(0,1) = 0.0;
+		tempMatA(1,0) = 1.0;
+		tempMatA(1,1) = 0.0;
+		controlW.setA(tempMatA);
+		
+		TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempMatB(sW,iW);
+		tempMatB(0,0) = 1.0;
+		tempMatB(1,0) = 0.0;
+		controlW.setB(tempMatB);
+		
+		TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempMatC(oW,sW);
+		tempMatC(0,0) = 0.0;
+		tempMatC(0,1) = 1.0;
+		controlW.setC(tempMatC);
+		
+		TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempMatD(oW,iW);
+		tempMatD(0,0) = 0.0;
+		controlW.setD(tempMatD);
+	}
+	
+	
 	
 /*
     //This is to test the state-space equations are being evaluated correctly.
@@ -172,9 +259,11 @@ int main(int argc, char **argv)
 	TooN::Vector<3, double> referencePos;		//the current desired position
 	double referenceYaw;						//the current desired yaw
 	TooN::Vector<3, double> viconPos;			//the current actual position as reported by Vicon(NED)
+	TooN::Vector<4, double> viconRot;
 	TooN::Vector<3, double> viconVel;			//the current actual velocity as reported by Vicon(NED) (this is a basic backwards diff.)
 	double viconYaw;							//the current actual yaw as reported by Vicon(NED)
 	TooN::Vector<3, double> ptamPos;			//the current position as reported by PTAM(NED)
+	TooN::Vector<4, double> ptamRot;
 	TooN::Vector<3, double> ptamVel;			//the current velocity as reported by PTAM(NED) (this is a basic backwards diff.)
 	double ptamYaw;								//the current yaw as reported by Vicon(NED)
 
@@ -249,16 +338,20 @@ int main(int argc, char **argv)
 	ros::Duration sleepone = ros::Duration(1,0);
 	sleepone.sleep();
 	sleepone.sleep();
-	ROS_INFO("flyvslam::TAKEOFF");
+	
+	//If not using the average roll and pitch method then take-off now.
+	if (avgRollPitchCorr_on==0)
 	{
-		std_msgs::Empty tempMsg;
-		pub_takeoff.publish(tempMsg);
-	}		
+		ROS_INFO("flyvslam::TAKEOFF");
+		{
+			std_msgs::Empty tempMsg;
+			pub_takeoff.publish(tempMsg);
+		}		
+	}
 	
 	//Main loop. Loop until last waypoint, then land.
 	while (ros::ok() && (landingNow==0))
 	{	
-		
 		/**************************************************************
 		//GET SENSOR DATA 
 		//start each loop by harvesting the latest input data
@@ -269,12 +362,14 @@ int main(int argc, char **argv)
 	
 		//Update the current position, velocity, and yaw from Vicon.
 		viconPos = vicon_info.currentPos;
+		viconRot = vicon_info.currentRot;
 		viconVel = vicon_info.currentVel;
 		viconYaw = vicon_info.currentYaw;
 
 		//Update the current position, velocity, and yaw from PTAM.
 		//These will be zeros for the first part of the flight, then arbirarily scaled, then become NED once the scale has been set.
 		ptamPos = ptam_info.currentPos;
+		ptamRot = ptam_info.currentRot;
 		ptamVel = ptam_info.currentVel;
 		ptamYaw = ptam_info.currentYaw;
 
@@ -355,15 +450,16 @@ int main(int argc, char **argv)
 			pub_ptaminit.publish(initCmd);
 			//Set the initial Vicon pose for the PTAM to NED transformation.
 			ptam_info.setInitVicon(vicon_info.currentPos,vicon_info.currentRot);
-			ROS_INFO("flyvslam::initViconPos: %4.2f,%4.2f,%4.2f",vicon_info.currentPos[0],vicon_info.currentPos[1],vicon_info.currentPos[2]);
-			ROS_INFO("flyvslam::initViconRot: %4.2f,%4.2f,%4.2f,%4.2f",vicon_info.currentRot[0],vicon_info.currentRot[1],vicon_info.currentRot[2],vicon_info.currentRot[3]);
-			//Set a manual pose correction. The orientation correction is set to do nothing at the moment. 
-			//Hence the orientation output will be in the camera frame.
-			//This overwrites the one set by the setinitVicon() above.
-			TooN::Vector<3,double> initPosTemp = TooN::makeVector(1.0, 0.0,-1.0);
-			TooN::Vector<4,double> initRotTemp = TooN::makeVector(1.0,0.0,0.0,0.0);
-			ROS_INFO("flyvslam::initAvgPos: %4.2f,%4.2f,%4.2f",initPosTemp[0],initPosTemp[1],initPosTemp[2]);
-			ptam_info.setInitGround(initPosTemp,initRotTemp);
+			
+			if (avgRollPitchCorr_on==1)
+			{
+				//Set a manual pose correction. The orientation correction is set to do nothing at the moment. 
+				//Hence the orientation output will be in the camera frame.
+				//This overwrites the one set by the setinitVicon() above.
+				TooN::Vector<3,double> initPosTemp = TooN::makeVector(1.0,-0.195,-1.0);
+				TooN::Vector<4,double> initRotTemp = TooN::makeVector(1.0,0.0,0.0,0.0);
+				ptam_info.setInitGround(initPosTemp,initRotTemp);
+			}
 			ptamInit = 2;
 		}	
 		//If at the sixth waypoint (idx==5) then start the scaling movement.
@@ -372,6 +468,7 @@ int main(int argc, char **argv)
 			ROS_INFO("flyvslam::PTAM Scale start");
 			ptamPos_one = ptamPos;
 			viconPos_one = viconPos;
+			
 			scaleInit = 1;
 		}
 		//If at the eighth waypoint (idx==7) then stop the scaling movement.
@@ -384,9 +481,27 @@ int main(int argc, char **argv)
 			double ptamDist  = TooN::norm(ptamPos_two - ptamPos_one);
 			double viconDist = TooN::norm(viconPos_two - viconPos_one);
 			ptam_info.setPtamScale(double(viconDist/ptamDist));
+			
+			//If using the no Vicon averaging method overwrtie the scale 
+			//using the dead reckoning estimate.
+			if (avgRollPitchCorr_on==1)
+			{
+				ptam_info.setPtamScale(double(2.0/ptamDist));
+			}
 			scaleInit = 2;
+			
+			//If using the averaging method then this is the time to takeoff.
+			if (avgRollPitchCorr_on==1)
+			{
+				ROS_INFO("flyvslam::TAKEOFF");
+				{
+					std_msgs::Empty tempMsg;
+					pub_takeoff.publish(tempMsg);
+				}
+			}
 		}
 		
+
 		/*
 	    //If at the twelth waypoint (idx==11) then check if vicon and ptam are within a tol. If not then break the loop and land
 		if((waypoint_info.currentIdx==11) && (ptamCheck==0))
@@ -420,10 +535,12 @@ int main(int argc, char **argv)
 				avgRoll   = ((avgRoll*avgCount)  + tmpRoll) /(avgCount+1.0);
 				avgPitch  = ((avgPitch*avgCount) + tmpPitch)/(avgCount+1.0);
 				avgCount = avgCount + 1;
-			
-				TooN::Vector<4,double> tempQuat = krot::r_e_to_q( TooN::makeVector( avgRoll,avgPitch,-1.5708 ) );
+				ROS_INFO("flyvslam::avgRoll=%6.5f, avgPitch:%6.5f",avgRoll,avgPitch);
+
 				if (avgCount == 50)
 				{
+					TooN::Vector<3,double> tempEuler = TooN::makeVector( avgRoll,avgPitch,-1.5708 );
+					TooN::Vector<4,double> tempQuat = krot::r_e_to_q( tempEuler );
 					//Only set the correction after the average has been created.
 					ROS_INFO("flyvslam::initAvgRot: %4.2f,%4.2f,%4.2f,%4.2f",tempQuat[0],tempQuat[1],tempQuat[2],tempQuat[3]);
 					ptam_info.setGroundOrientation(tempQuat);
@@ -432,7 +549,7 @@ int main(int argc, char **argv)
 				ptamCheckPos = ptamPos;
 			}
 		}
-
+		
 		
 		
 		
@@ -478,6 +595,7 @@ int main(int argc, char **argv)
 			viconPos = ptamPos;
 			viconVel = ptamVel;
 			viconYaw = ptamYaw;
+			viconRot = ptamRot;
 			
 			//Check for new PTAM data. If none then no cmd_vel is published.
 			if (1) 
@@ -617,8 +735,56 @@ int main(int argc, char **argv)
 			//matrices which are updated once per-loop.
 			**************************************************************/
 			
+			//===================
+			//Need to find the body frame errors in x,y,z,w
+			//===================
+			//error = reference - current
+			TooN::Vector<3,double> nedPosErr = referencePos-viconPos;
+			double nedYawErr = referenceYaw-viconYaw;
+			krot::r_wrap_pi(nedYawErr);   //wrap yaw error to (-PI:PI] so the MAV move the most direct direction
+			
+			//Rotate NED errors into the body frame.
+			TooN::Vector<3,double> mavPosErr = krot::r_apply_q(nedPosErr,viconRot);
+			
+			//At this point the inputs to the state-space lqg/h2 controllers have been found.
+			//[mavPosErr[0] mavPosErr[1] mavPosErr[2] nedYawErr]
+			
+			//===================
+			//Update the controllers.
+			//===================
+			TooN::Vector<TooN::Dynamic,double> tempOutputX(oX);
+			TooN::Vector<TooN::Dynamic,double> tempOutputY(oY);
+			TooN::Vector<TooN::Dynamic,double> tempOutputZ(oZ);
+			TooN::Vector<TooN::Dynamic,double> tempOutputW(oW);
+			{
+				TooN::Vector<TooN::Dynamic,double> tempInput(iX);
+				tempInput = TooN::makeVector(mavPosErr[0]);
+				tempOutputX = controlX.update(tempInput);
+			}
+			{
+				TooN::Vector<TooN::Dynamic,double> tempInput(iY);
+				tempInput = TooN::makeVector(mavPosErr[1]);
+				tempOutputX = controlY.update(tempInput);
+			}
+			{
+				TooN::Vector<TooN::Dynamic,double> tempInput(iZ);
+				tempInput = TooN::makeVector(mavPosErr[2]);
+				tempOutputX = controlZ.update(tempInput);
+			}
+			{
+				TooN::Vector<TooN::Dynamic,double> tempInput(iW);
+				tempInput = TooN::makeVector(nedYawErr);
+				tempOutputX = controlW.update(tempInput);
+			}
 			
 			
+			//Fill in the control values to be sent to the MAV and send.
+			geometry_msgs::Twist cmd_vel;
+			cmd_vel.linear.x  = tempOutputX[0];
+			cmd_vel.linear.y  = (-1)*tempOutputY[0];		//Axis negated to make NED
+			cmd_vel.linear.z  = (-1)*tempOutputZ[0];		//Axis negated to make NED
+			cmd_vel.angular.z = (-1)*tempOutputW[0];		//Axis negated to make NED
+			pub_cmd_vel.publish(cmd_vel);	
 			
 		}
 

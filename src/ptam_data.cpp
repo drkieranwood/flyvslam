@@ -122,14 +122,8 @@ void ptam_data::update(const geometry_msgs::PoseWithCovarianceStampedConstPtr& m
 		//Project [0.195,0,0]' into the world frame using the inverse of the current orientation
 		TooN::Vector<4,double> tmp_invRot = krot::r_inv_q(workingRot);
 		TooN::Vector<3,double> cameraCorr = krot::r_apply_q(cameraOffset,tmp_invRot);
-		//If the first time then store the correction
-		if (setCameraCorr==0)
-		{
-				initCamerCorr = cameraCorr;
-				setCameraCorr = 1;
-		}
 		//Apply correction in world frame
-		workingPos = workingPos - (cameraCorr - initCamerCorr);
+		workingPos = workingPos - cameraCorr;
 		
 		
 		//========================
@@ -222,7 +216,8 @@ void ptam_data::update(const geometry_msgs::PoseWithCovarianceStampedConstPtr& m
 
 //========================
 //========================
-//Set the intial Vicon position when PTAM was initialised.
+//Set the intial Vicon position when PTAM was initialised. 
+//Note this is the position of the camera, hence any body frame offset needs to be added onto the initPos.
 void ptam_data::setInitVicon(TooN::Vector<3, double> initPos,TooN::Vector<4, double> initRot)
 {
 	//Only allow this to occur once.
@@ -259,6 +254,7 @@ void ptam_data::setPtamScale(double scaleTemp)
 //========================
 //========================
 //Set the pose correction. Ground thruth position and orientation.
+//Note this is the position of the camera, hence any body frame offset needs to be added onto the tempPos.
 void ptam_data::setInitGround(TooN::Vector<3, double> tempPos,TooN::Vector<4, double> tempRot)
 {
 	//Different to the Vicon init this can be called more than once.
@@ -285,8 +281,6 @@ void ptam_data::setGroundOrientation(TooN::Vector<4, double> tempRot)
 	//Check the quaternions are valid and normalise.
 	krot::r_check_q(groundOrientation);
 	krot::r_check_q(groundOrientationInv);
-	
-	ROS_INFO("flyvslam::quat1:%5.2f,quat2:%5.2f,quat3:%5.2f,quat4:%5.2f",groundOrientation[0],groundOrientation[1],groundOrientation[2],groundOrientation[3]);
 }
 
 
