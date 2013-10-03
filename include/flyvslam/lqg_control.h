@@ -1,5 +1,5 @@
-#ifndef _LQG_CONTROL_SYSTEM_H
-#define _LQG_CONTROL_SYSTEM_H
+#ifndef _LQG_CONTROL_H
+#define _LQG_CONTROL_H
 
 //Required libraries and functions definitions
 #include <TooN/TooN.h>
@@ -18,40 +18,55 @@
 
 //Note that the definition TooN::Matrix<> or TooN::Vector<> indicates a 
 //dynamically sized array.
+
+using namespace TooN;
+
 class lqg_control
 {
 	public:
-		//Constructor.
-		lqg_control();
+		//Constructor. No empty constructor available.
+		lqg_control(int states,int inputs,int outputs);
 		
 		//Update the control by one iteration. It is up to the caller to 
 		//ensure the rate is appropreate.
-		TooN::Vector<TooN::Dynamic,double> update(TooN::Vector<TooN::Dynamic,double> inputVec);
+		Vector<Dynamic,double> update(Vector<Dynamic,double> inputVec);
 		
 		//Returns the current internal state
-		TooN::Vector<TooN::Dynamic,double> getState(void);
+		Vector<Dynamic,double> getState(void);
 		
 		//Returns the current output
-		TooN::Vector<TooN::Dynamic,double> getOutput(void);
+		Vector<Dynamic,double> getOutput(void);
 		
 		//Functions to set the state-space matrices
-		void setA(TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> inMat);
-		void setB(TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> inMat);
-		void setC(TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> inMat);
-		void setD(TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> inMat);		
+		void setA(Matrix<Dynamic,Dynamic,double> inMat);
+		void setB(Matrix<Dynamic,Dynamic,double> inMat);
+		void setC(Matrix<Dynamic,Dynamic,double> inMat);
+		void setD(Matrix<Dynamic,Dynamic,double> inMat);	
+		
+		//Functions to get the state-space matrices
+		Matrix<Dynamic,Dynamic,double> getA(void);
+		Matrix<Dynamic,Dynamic,double> getB(void);
+		Matrix<Dynamic,Dynamic,double> getC(void);
+		Matrix<Dynamic,Dynamic,double> getD(void);	
 		
 		
 		
 		//Storage for the system matrices
-		TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> matA;
-		TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> matB;
-		TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> matC;
-		TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> matD;
-		
+		Matrix<Dynamic,Dynamic,double>* matA;
+		Matrix<Dynamic,Dynamic,double>* matB;
+		Matrix<Dynamic,Dynamic,double>* matC;
+		Matrix<Dynamic,Dynamic,double>* matD;
+			
 		//The internal state storage and last input and output
-		TooN::Vector<TooN::Dynamic,double> currentState;
-		TooN::Vector<TooN::Dynamic,double> currentInput;
-		TooN::Vector<TooN::Dynamic,double> currentOutput;
+		Vector<Dynamic,double>* currentState;
+		Vector<Dynamic,double>* currentInput;
+		Vector<Dynamic,double>* currentOutput;
+		
+		//Store the number of states, inputs and outputs.
+		int statesCount;
+		int inputsCount;
+		int outputsCount;
+
 };
 
 

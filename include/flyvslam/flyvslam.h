@@ -1,5 +1,5 @@
-#ifndef _FLYVSLAM_SYSTEM_H
-#define _FLYVSLAM_SYSTEM_H
+#ifndef _FLYVSLAM_H
+#define _FLYVSLAM_H
 
 #include <TooN/TooN.h>
 #include <TooN/se3.h>

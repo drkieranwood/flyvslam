@@ -14,6 +14,7 @@
 #include <iostream>
 #include <fstream>
 #include <string>
+#include <TooN/TooN.h>
 
 #include <flyvslam/flyvslam.h>
 #include <flyvslam/waypoint_data.h>
@@ -44,6 +45,7 @@ int main(int argc, char **argv)
 	//Objects and variables
 	//=========================
 	int ptamControlOn = 0;
+	int LQG_OK=0;
 	
 	//Create objects to store and handle vicon, ptam, and waypoint data.
 	vicon_data vicon_info;
@@ -52,54 +54,117 @@ int main(int argc, char **argv)
 	
 	//Create control objects for X,Y,Z,W(yaw)
 	//Note the LQG is applied using the H2 method since it creates a 
-	//single state-space controller.
-	lqg_control controlX;
-	lqg_control controlY;
-	lqg_control controlZ;
-	lqg_control controlW;
+	//single state-space controller. The arguments are the number of [states,inputs,outputs]
+	
+	int sX=2;
+	int iX=1;
+	int oX=1;
+	lqg_control controlX(sX,iX,oX);
+	//lqg_control controlY();
+	//lqg_control controlZ();
+	//lqg_control controlW();
 	
 	//Set the matrices for the controllers. 
 	//Temporary matrices need to be created in order to set the rows and columns.
 	{
-		TooN::Matrix<3,3,double> tempMatA =  TooN::data(0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0);
-		controlX.setA = tempMatA;
-		TooN::Matrix<3,1,double> tempMatB =  TooN::data(0.0,0.0,0.0);
-		controlX.setB = tempMatB;
-		TooN::Matrix<1,3,double> tempMatC =  TooN::data(0.0,0.0,0.0);
-		controlX.setC = tempMatC;
-		TooN::Matrix<1,1,double> tempMatD =  TooN::data(0.0);
-		controlX.setD = tempMatD;
+		TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempMatA(sX,sX);
+		tempMatA(0,0) = 0.0;
+		tempMatA(0,1) = 0.0;
+		tempMatA(1,0) = 1.0;
+		tempMatA(1,1) = 0.0;
+		controlX.setA(tempMatA);
+		
+		TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempMatB(sX,iX);
+		tempMatB(0,0) = 1.0;
+		tempMatB(1,0) = 0.0;
+		controlX.setB(tempMatB);
+		
+		TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempMatC(oX,sX);
+		tempMatC(0,0) = 0.0;
+		tempMatC(0,1) = 1.0;
+		controlX.setC(tempMatC);
+		
+		TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempMatD(oX,iX);
+		tempMatD(0,0) = 0.0;
+		controlX.setD(tempMatD);
+	}
+	
+/*
+    //This is to test the state-space equations are being evaluated correctly.
+    //The update function is called 5 times with a single input [1,2,3,4,5]
+	TooN::Vector<TooN::Dynamic,double> tempInp(1);
+	TooN::Vector<TooN::Dynamic,double> tempOut(1);
+	tempInp = TooN::makeVector(1.0);
+	tempOut = controlX.update(tempInp);
+	std::cout << tempInp[0] << " " << tempOut[0] << std::endl;
+	
+	tempInp = TooN::makeVector(2.0);
+	tempOut = controlX.update(tempInp);
+	std::cout << tempInp[0] << " " << tempOut[0] << std::endl;
+	
+	tempInp = TooN::makeVector(3.0);
+	tempOut = controlX.update(tempInp);
+	std::cout << tempInp[0] << " " << tempOut[0] << std::endl;
+	
+	tempInp = TooN::makeVector(4.0);
+	tempOut = controlX.update(tempInp);
+	std::cout << tempInp[0] << " " << tempOut[0] << std::endl;
+
+	tempInp = TooN::makeVector(5.0);
+	tempOut = controlX.update(tempInp);
+	std::cout << tempInp[0] << " " << tempOut[0] << std::endl;
+	
+
+	//This is to check the LQG control matrices were being set correctly.
+	//The setM() command is used above and the getM() command is used here.
+	//Note how the get() command sucessfully sizes the tempM dynamic matrices.
+	TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempA = controlX.getA();
+	std::cout << tempA(0,0) << " " << tempA(0,1) << " " << tempA(0,2) << std::endl;
+	//std::cout << tempA(1,0) << " " << tempA(1,1) << " " << tempA(1,2) << std::endl;
+	//std::cout << tempA(2,0) << " " << tempA(2,1) << " " << tempA(2,2) << std::endl;
+	
+	TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempB = controlX.getB();
+	std::cout << tempB(0,0) << " " << tempB(1,0) << " " << tempB(2,0) << std::endl;
+	
+	TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempC = controlX.getC();
+	std::cout << tempC(0,0) << " " << tempC(0,1) << " " << tempC(0,2) << std::endl;
+	
+	TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempD = controlX.getD();
+	std::cout << tempD(0,0) << std::endl;
+*/
+
+	/*
+	{
+		TooN::Matrix<3,3,double> tempMatA =  TooN::Data(0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0);
+		controlY.setA(tempMatA);
+		TooN::Matrix<3,1,double> tempMatB =  TooN::Data(0.0,0.0,0.0);
+		controlY.setB(tempMatB);
+		TooN::Matrix<1,3,double> tempMatC =  TooN::Data(0.0,0.0,0.0);
+		controlY.setC(tempMatC);
+		TooN::Matrix<1,1,double> tempMatD =  TooN::Data(0.0);
+		controlY.setD(tempMatD);
 	}
 	{
-		TooN::Matrix<3,3,double> tempMatA =  TooN::data(0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0);
-		controlY.setA = tempMatA;
-		TooN::Matrix<3,1,double> tempMatB =  TooN::data(0.0,0.0,0.0);
-		controlY.setB = tempMatB;
-		TooN::Matrix<1,3,double> tempMatC =  TooN::data(0.0,0.0,0.0);
-		controlY.setC = tempMatC;
-		TooN::Matrix<1,1,double> tempMatD =  TooN::data(0.0);
-		controlY.setD = tempMatD;
+		TooN::Matrix<3,3,double> tempMatA =  TooN::Data(0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0);
+		controlZ.setA(tempMatA);
+		TooN::Matrix<3,1,double> tempMatB =  TooN::Data(0.0,0.0,0.0);
+		controlZ.setB(tempMatB);
+		TooN::Matrix<1,3,double> tempMatC =  TooN::Data(0.0,0.0,0.0);
+		controlZ.setC(tempMatC);
+		TooN::Matrix<1,1,double> tempMatD =  TooN::Data(0.0);
+		controlZ.setD(tempMatD);
 	}
 	{
-		TooN::Matrix<3,3,double> tempMatA =  TooN::data(0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0);
-		controlZ.setA = tempMatA;
-		TooN::Matrix<3,1,double> tempMatB =  TooN::data(0.0,0.0,0.0);
-		controlZ.setB = tempMatB;
-		TooN::Matrix<1,3,double> tempMatC =  TooN::data(0.0,0.0,0.0);
-		controlZ.setC = tempMatC;
-		TooN::Matrix<1,1,double> tempMatD =  TooN::data(0.0);
-		controlZ.setD = tempMatD;
+		TooN::Matrix<3,3,double> tempMatA =  TooN::Data(0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0);
+		controlX.setA(tempMatA);
+		TooN::Matrix<3,1,double> tempMatB =  TooN::Data(0.0,0.0,0.0);
+		controlX.setB(tempMatB);
+		TooN::Matrix<1,3,double> tempMatC =  TooN::Data(0.0,0.0,0.0);
+		controlX.setC(tempMatC);
+		TooN::Matrix<1,1,double> tempMatD =  TooN::Data(0.0);
+		controlX.setD(tempMatD);
 	}
-	{
-		TooN::Matrix<3,3,double> tempMatA =  TooN::data(0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0);
-		controlX.setW = tempMatA;
-		TooN::Matrix<3,1,double> tempMatB =  TooN::data(0.0,0.0,0.0);
-		controlX.setW = tempMatB;
-		TooN::Matrix<1,3,double> tempMatC =  TooN::data(0.0,0.0,0.0);
-		controlX.setW = tempMatC;
-		TooN::Matrix<1,1,double> tempMatD =  TooN::data(0.0);
-		controlX.setW = tempMatD;
-	}
+	*/
 	
 
 	//Some helpful variables. These just extract and store a direct copy of data available in 
@@ -193,6 +258,7 @@ int main(int argc, char **argv)
 	//Main loop. Loop until last waypoint, then land.
 	while (ros::ok() && (landingNow==0))
 	{	
+		
 		/**************************************************************
 		//GET SENSOR DATA 
 		//start each loop by harvesting the latest input data
@@ -543,7 +609,7 @@ int main(int argc, char **argv)
 			}
 			
 		}
-		else if ()
+		else if (LQG_OK==1)
 		{
 			/**************************************************************
 			//LQG/H2 Control
@@ -552,13 +618,11 @@ int main(int argc, char **argv)
 			**************************************************************/
 			
 			
-		}
-		else
-		{
 			
 			
 		}
-		
+
+
 		/**************************************************************
 		//CHECK STATUS' 
 		//end each loop by checking if the final waypoint has been reached, getting

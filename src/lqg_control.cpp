@@ -1,66 +1,121 @@
 #include <flyvslam/lqg_control.h>
 
-lqg_control::lqg_control()
+using namespace TooN;
+
+lqg_control::lqg_control(int states,int inputs,int outputs)
 {
 	//The default system is a SISO pass-through. i.e the system has no
 	//dynamics and outputs the input immidiately.
-	matA = TooN::data(0.0);
-	matB = TooN::data(1.0);
-	matC = TooN::data(0.0);
-	matD = TooN::data(1.0);
+	//The class defines a set of pointers to dynamic matrices.
+	//These are now initialised with an empty 1x1 matirx.
+	statesCount  = states;
+	inputsCount  = inputs;
+	outputsCount = outputs;
 	
-	currentState  = TooN::makeVector(0.0);
-    currentInput  = TooN::makeVector(0.0);
-    currentOutput = TooN::makeVector(0.0);
+	{
+		Matrix<Dynamic,Dynamic,double> tempMat(states,states);
+		matA = new Matrix<Dynamic,Dynamic,double>(tempMat);
+	}
+	{
+		Matrix<Dynamic,Dynamic,double> tempMat(states,inputs);
+		matB = new Matrix<Dynamic,Dynamic,double>(tempMat);
+	}
+	{
+		Matrix<Dynamic,Dynamic,double> tempMat(outputs,states);
+		matC = new Matrix<Dynamic,Dynamic,double>(tempMat);
+	}
+	{
+		Matrix<Dynamic,Dynamic,double> tempMat(outputs,inputs);
+		matD = new Matrix<Dynamic,Dynamic,double>(tempMat);
+	}
+	
+	//States inputs and outputs
+	{
+		Vector<Dynamic,double> tempVec(statesCount);
+		currentState = new Vector<Dynamic,double>(tempVec);
+		*currentState = Zeros;
+	}
+	{
+		Vector<Dynamic,double> tempVec(inputsCount);
+		currentInput = new Vector<Dynamic,double>(tempVec);
+		*currentInput = Zeros;
+	}
+	{
+		Vector<Dynamic,double> tempVec(outputsCount);
+		currentOutput = new Vector<Dynamic,double>(tempVec);
+		*currentOutput = Zeros;
+	}
 }
 
-TooN::Vector<TooN::Dynamic,double> lqg_control::update(TooN::Vector<TooN::Dynamic,double> inputVec)
+Vector<Dynamic,double> lqg_control::update(Vector<Dynamic,double> inputVec)
 {
 	//Create the output
 	//y[k] = C*x[k] + D*u[k]
-	currentOutput = (matC*currentState) + (matD*inputVec);
+	*currentOutput = ((*matC)*(*currentState)) + ((*matD)*(inputVec));
 	
 	//Update the state
 	//x[k+1] = A*x[k] + B*u[k]
-	TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempMat = (matA*currentState) + (matB*inputVec);
-	currentState = tempMat;
+	*currentState = ((*matA)*(*currentState)) + ((*matB)*(inputVec));;
 	
-	//Update the input
-	currentInput = inputVec;
+	//Update the input storage
+	*currentInput = inputVec;
 	
-	//Return the output
-	return currentOutput;
+	//Return the output. De-reference the pointer so it is returned as 
+	//a dynamic Vector object.
+	return *currentOutput;
 }
 
 //Returns the current state
-TooN::Vector<TooN::Dynamic,double> lqg_control::getState(void)
+Vector<Dynamic,double> lqg_control::getState(void)
 {
-	return currentState;
+	//Return the output. De-reference the pointer so it is returned as 
+	//a dynamic Vector object.
+	return *currentState;
 }
 		
 //Returns the current output
-TooN::Vector<TooN::Dynamic,double> lqg_control::getOutput(void)
+Vector<Dynamic,double> lqg_control::getOutput(void)
 {
-	return currentOutput;	
+	//Return the output. De-reference the pointer so it is returned as 
+	//a dynamic Vector object.
+	return *currentOutput;	
 }
 
 //Functions to setup the state space matrices
+void lqg_control::setA(Matrix<Dynamic,Dynamic,double> inMat)
+{
+	*matA = inMat;	
+}
+void lqg_control::setB(Matrix<Dynamic,Dynamic,double> inMat)
+{
+	*matB = inMat;	
+}
+void lqg_control::setC(Matrix<Dynamic,Dynamic,double> inMat)
+{
+	*matC = inMat;	
+}
+void lqg_control::setD(Matrix<Dynamic,Dynamic,double> inMat)
+{
+	*matD = inMat;	
+}
 
-lqg_control::setA(TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> inMat)
+
+//Functions to retrieve the state space matrices
+Matrix<Dynamic,Dynamic,double> lqg_control::getA(void)
 {
-	matA = inMat;	
+	return *matA;
 }
-lqg_control::setB(TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> inMat)
+Matrix<Dynamic,Dynamic,double> lqg_control::getB(void)
 {
-	matB = inMat;	
+	return *matB;
 }
-lqg_control::setC(TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> inMat)
+Matrix<Dynamic,Dynamic,double> lqg_control::getC(void)
 {
-	matC = inMat;	
+	return *matC;
 }
-lqg_control::setD(TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> inMat)
+Matrix<Dynamic,Dynamic,double> lqg_control::getD(void)
 {
-	matD = inMat;	
+	return *matD;
 }
 
 //eof

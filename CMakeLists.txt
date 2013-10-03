@@ -22,6 +22,7 @@ set(FLYVSLAM_SOURCE_FILES
 	src/vicon_data.cpp 
 	src/ptam_data.cpp 
 	src/waypoint_data.cpp 
+	src/lqg_control.cpp 
 )
 
 set(FLYVSLAM_HEADER_FILES        
@@ -29,6 +30,7 @@ set(FLYVSLAM_HEADER_FILES
 	include/flyvslam/vicon_data.h
 	include/flyvslam/ptam_data.h
 	include/flyvslam/waypoint_data.h
+	include/flyvslam/lqg_control.h
 )
 
 include_directories(
