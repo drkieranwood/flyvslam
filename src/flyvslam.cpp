@@ -320,6 +320,9 @@ int main(int argc, char **argv)
 	
 	ros::Publisher  pub_vicon_vel = n.advertise<geometry_msgs::Twist>("/vicon_vel", 1);
 	ros::Publisher  pub_vslam_vel = n.advertise<geometry_msgs::Twist>("/vslam_vel", 1);
+	
+	//Subscribe to the topic that sets the keyboard inputted reference position.
+	ros::Subscriber sub_teleopref = n.subscribe("/ref_pose", 1, &waypoint_data::updateFromKeys,&waypoint_info);
 
 
 	//=========================
