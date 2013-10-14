@@ -57,6 +57,9 @@ class ptam_data
 		//The ptam scale correction.
 		double ptamScale;
 		
+		//Flag to indicate at the velocity estimation should start
+		int velEst_on;
+		
 		//These are ground thruth values used to allow a pose correction to the 
 		//PTAM raw output.
 		//The ptam orientation correction as a quaternion. 

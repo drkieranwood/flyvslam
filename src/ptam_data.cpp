@@ -45,6 +45,8 @@ ptam_data::ptam_data()
 	
 	//Set if the vicon pose correction should be used.
 	viconOn = 1;
+	
+	velEst_on=0;
 }
 
 
@@ -150,59 +152,67 @@ void ptam_data::update(const geometry_msgs::PoseWithCovarianceStampedConstPtr& m
 		TooN::Vector<3, double> tmp_vel_pos;
 		TooN::Vector<3, double> tmp_vel_rot;
 		int oldestIdx = currIdx;
-		for (int ii=0 ; ii<(storageLength-1) ; ii++)
+		
+		if (velEst_on<storageLength)
 		{
-			//The next position in the array represents the oldest data.
-			//If at the end then loop.
-			oldestIdx = oldestIdx + 1;
-			if (oldestIdx == storageLength)
-			{
-				oldestIdx = 0;
-			}
-			
-			//The next next position is needed to form a difference. 
-			//If at then end then loop.
-			int newestIdx = oldestIdx + 1;
-			if (newestIdx==storageLength)
-			{
-				newestIdx=0;
-			}
-			
-			//Use the values to find a backwards difference velocity. Only if data is not identical.
-			if(ptamStorePos[oldestIdx] != ptamStorePos[newestIdx])
-			{
-				double dt = (double)(ptamStoreTime[newestIdx]-ptamStoreTime[oldestIdx]).toSec();
-				if(dt > 0.0)
-				{
-					TooN::Vector<3, double> temp_current = ptamStorePos[newestIdx];
-					TooN::Vector<3, double> temp_previous = ptamStorePos[oldestIdx];
-					tmp_vel_pos = TooN::makeVector((temp_current[0]-temp_previous[0])/dt,
-					(temp_current[1]-temp_previous[1])/dt,
-					(temp_current[2]-temp_previous[2])/dt);
-					
-					temp_current = ptamStoreEuler[newestIdx];
-					temp_previous = ptamStoreEuler[oldestIdx];
-					tmp_vel_rot = TooN::makeVector((temp_current[0]-temp_previous[0])/dt,
-					(temp_current[1]-temp_previous[1])/dt,
-					(temp_current[2]-temp_previous[2])/dt);
-				}
-			}
-			else
-			{
-				//Set velocity to zero
-				tmp_vel_pos = TooN::makeVector(0.0,0.0,0.0);
-				tmp_vel_rot = TooN::makeVector(0.0,0.0,0.0);
-			}
-			
-			//(ii+1) indicates how many velocities have been averaged so 
-			//now add the new value and re-average.
-			workingVelPos = ((workingVelPos*ii) + tmp_vel_pos)/(ii+1.0);
-			workingVelRot = ((workingVelRot*ii) + tmp_vel_rot)/(ii+1.0);
-			
+			velEst_on++;
 		}
+		else
+		{
+			for (int ii=0 ; ii<(storageLength-1) ; ii++)
+			{
+				//The next position in the array represents the oldest data.
+				//If at the end then loop.
+				oldestIdx = oldestIdx + 1;
+				if (oldestIdx == storageLength)
+				{
+					oldestIdx = 0;
+				}
+				
+				//The next next position is needed to form a difference. 
+				//If at then end then loop.
+				int newestIdx = oldestIdx + 1;
+				if (newestIdx==storageLength)
+				{
+					newestIdx=0;
+				}
+				
+				//Use the values to find a backwards difference velocity. Only if data is not identical.
+				if(ptamStorePos[oldestIdx] != ptamStorePos[newestIdx])
+				{
+					double dt = (double)(ptamStoreTime[newestIdx]-ptamStoreTime[oldestIdx]).toSec();
+					if(dt > 0.0)
+					{
+						TooN::Vector<3, double> temp_current = ptamStorePos[newestIdx];
+						TooN::Vector<3, double> temp_previous = ptamStorePos[oldestIdx];
+						tmp_vel_pos = TooN::makeVector((temp_current[0]-temp_previous[0])/dt,
+						(temp_current[1]-temp_previous[1])/dt,
+						(temp_current[2]-temp_previous[2])/dt);
+						
+						temp_current = ptamStoreEuler[newestIdx];
+						temp_previous = ptamStoreEuler[oldestIdx];
+						tmp_vel_rot = TooN::makeVector((temp_current[0]-temp_previous[0])/dt,
+						(temp_current[1]-temp_previous[1])/dt,
+						(temp_current[2]-temp_previous[2])/dt);
+					}
+				}
+				else
+				{
+					//Set velocity to zero
+					tmp_vel_pos = TooN::makeVector(0.0,0.0,0.0);
+					tmp_vel_rot = TooN::makeVector(0.0,0.0,0.0);
+				}
+				
+				//(ii+1) indicates how many velocities have been averaged so 
+				//now add the new value and re-average.
+				workingVelPos = ((workingVelPos*ii) + tmp_vel_pos)/(ii+1.0);
+				workingVelRot = ((workingVelRot*ii) + tmp_vel_rot)/(ii+1.0);
+				
+			}
 
-		//Set the final Velocity as the output.
-		currentVel = workingVelPos;
+			//Set the final Velocity as the output.
+			currentVel = workingVelPos;
+		}	
 		
 		//Move along one storage. If at the end then loop.
 		currIdx = currIdx +1;
