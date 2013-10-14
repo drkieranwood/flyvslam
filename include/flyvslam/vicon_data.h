@@ -6,7 +6,8 @@
 #include "ros/ros.h"
 
 //Class to store the Vicon data received.
-//This class stores n previous vicon data frames and provides a basic backwards differential velocity.
+//This class stores n previous vicon data frames and provides a basic 
+//backwards differential velocity.
 class vicon_data
 {
 	public:
@@ -28,11 +29,16 @@ class vicon_data
 
 		//Current index within the storage array.
 		int viconIdx;
+		
+		//Flag to indicate at the velocity estimation should start
+		int velEst_on;
 
-		//The last time a Vicon frame was received. This is used to check for droputs and hence halt the contoller.
+		//The last time a Vicon frame was received. This is used to check 
+		//for droputs and hence halt the contoller.
 		ros::Time vicon_last_update_time;
 		
-		//Latest calculated Vicon velocity (this is used in the control). These values are converted into the NED RF.
+		//Latest calculated Vicon velocity (this is used in the 
+		//control). These values are converted into the NED RF.
 		TooN::Vector<3, double> currentVel;
 		TooN::Vector<3, double> currentPos;
 		double currentYaw;
