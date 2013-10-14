@@ -15,6 +15,8 @@ waypoint_data::waypoint_data()
 	targetYaw=0.0;
 	targetPos=TooN::makeVector(0.0,0.0,0.0);
 	targetLook=TooN::makeVector(0.0,0.0,0.0);
+	teleopPos=TooN::makeVector(0.0,0.0,0.0);
+	teleopYaw=0.0;
 }
 
 
@@ -36,7 +38,7 @@ double waypoint_data::getTargetYaw(void)
 	{
 		targetYaw = atan2( delta_y , delta_x );
 	}
-	return targetYaw;
+	return (targetYaw+teleopYaw);
 }
 
 
@@ -47,6 +49,10 @@ double waypoint_data::getTargetYaw(void)
 //TooN vecor. Internally stores the current look position. Requires that 
 //at least one call is made to this function between waypoints (i.e. the 
 //waypoint transition time cannot be smaller than the sampling interval)
+
+//Smooth curves can be specified by quantising circular paths into a 
+//series of nodes. Just make sure the time-between nodes is larger than
+//the control sampling rates.
 TooN::Vector<3, double> waypoint_data::getTargetPos(ros::Time timeNow)
 {
 	//Switch to next waypoint if the current waypoint transition time 
@@ -88,7 +94,7 @@ TooN::Vector<3, double> waypoint_data::getTargetPos(ros::Time timeNow)
 	targetPos  = waypointsPos[currentIdx]  +(tmpvecPos *lerpval);
 	targetLook = waypointsLook[currentIdx] +(tmpvecLook*lerpval);
 
-	return targetPos;
+	return (targetPos+teleopPos);
 }
 
 
@@ -197,6 +203,7 @@ bool waypoint_data::readWaypointData(void)
 		//If the file is not opened then use some default vakues
 		ROS_INFO("flyvslam:: Could not find waypoints.txt in current dir. Using default values.");
 		
+		//Default path is forwards and back 1m in the x axis at 1m altitude.
 		waypointCount = 2;
 		waypointsPos  = new TooN::Vector<3, double>[waypointCount];
 		waypointsPos[0] = TooN::makeVector(0,0,-1);
@@ -213,5 +220,16 @@ bool waypoint_data::readWaypointData(void)
 		//Return -1 to indicate the file was not successfully read.
 		return -1;
 	}
+	
+	
+
+}
+
+//Receive the keyboard inputs
+void waypoint_data::updateFromKeys(const geometry_msgs::TwistConstPtr& msg)
+{
+	//Store the keyboard inputs into the waypoint storage
+	teleopPos = TooN::makeVector(msg->linear.x,msg->linear.y,msg->linear.z);
+	teleopYaw = msg->angular.z ;
 }
 //eof

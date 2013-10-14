@@ -3,6 +3,7 @@
 
 #include <TooN/TooN.h>
 #include "ros/ros.h"
+#include "geometry_msgs/Twist.h"
 
 
 //Class to store the waypoint data.
@@ -28,6 +29,10 @@ class waypoint_data
 		//in the same dir. Ignores blank lines and lines starting with a 
 		//hash (#). Returns true(1) if success or 0 elsewise.
 		bool readWaypointData(void);
+		
+		//Function to add the keyboard reference position onto the 
+		//current waypoint position.
+		void updateFromKeys(const geometry_msgs::TwistConstPtr& msg);
 
 
 		//Total number of waypoints read from the file.
@@ -40,21 +45,28 @@ class waypoint_data
 		TooN::Vector<3, double> * waypointsLook;
 		ros::Duration * waypointsTime;
 
+		//Clock time the last waypoint changed, and start of the whole 
+		//waypoint following flight.
+		ros::Time waypoint_time;
+		ros::Time start_time;
+		
 		//Current waypoint index (i.e. the last waypoint passed/reached)
 		//The getTagetYaw() and getTargetPos() functions lerp between the 
 		//current index and the next index over the specified duration time.
 		int currentIdx;
 
-		//Clock time the last waypoint changed, and start of the whole 
-		//waypoint following flight.
-		ros::Time waypoint_time;
-		ros::Time start_time;
 
+	private:
+		//Additional yaw and position specified by the keyboard input topic
+		TooN::Vector<3, double> teleopPos;
+		double teleopYaw;
+		
 		//Storage for the current lerp'd targetPos and targetLook positions. 
 		//Also store the target yaw for checking of singularities.
 		TooN::Vector<3, double> targetPos;
 		double targetYaw;
 		TooN::Vector<3, double> targetLook;
+
 };
 
 #endif
