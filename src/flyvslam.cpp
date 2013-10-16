@@ -45,9 +45,9 @@ int main(int argc, char **argv)
 	//=========================
 	//Objects and variables
 	//=========================
-	int ptamControlOn = 1;
-	int avgRollPitchCorr_on = 1;
-	int LQG_OK=0;
+	int ptamControlOn = 0;
+	int avgRollPitchCorr_on = 0;
+	int LQG_OK=1;
 	
 	//Create objects to store and handle vicon, ptam, and waypoint data.
 	vicon_data vicon_info;
@@ -57,7 +57,6 @@ int main(int argc, char **argv)
 	//Create control objects for X,Y,Z,W(yaw)
 	//Note the LQG is applied using the H2 method since it creates a 
 	//single state-space controller. The arguments are the number of [states,inputs,outputs]
-	
 	int sX=2;
 	int iX=1;
 	int oX=1;
@@ -66,7 +65,7 @@ int main(int argc, char **argv)
 	int iY=1;
 	int oY=1;
 	
-	int sZ=2;
+	int sZ=5;
 	int iZ=1;
 	int oZ=1;
 	
@@ -129,20 +128,52 @@ int main(int argc, char **argv)
 	
 	{
 		TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempMatA(sZ,sZ);
-		tempMatA(0,0) = 0.0;
-		tempMatA(0,1) = 0.0;
-		tempMatA(1,0) = 1.0;
-		tempMatA(1,1) = 0.0;
+		tempMatA(0,0) = 0.6734;
+		tempMatA(0,1) = -0.01129;
+		tempMatA(0,2) = 0.07994;
+		tempMatA(0,3) = 0.1677;
+		tempMatA(0,4) = 0.0;
+		
+		tempMatA(1,0) = 0.0826;
+		tempMatA(1,1) = 0.9419;
+		tempMatA(1,2) = 0.007434;
+		tempMatA(1,3) = 0.005602;
+		tempMatA(1,4) = 0.0;
+		
+		tempMatA(2,0) = 0.0;
+		tempMatA(2,1) = 0.0;
+		tempMatA(2,2) = 0.0;
+		tempMatA(2,3) = 1.0;
+		tempMatA(2,4) = 0.0;
+		
+		tempMatA(3,0) = 0.0;
+		tempMatA(3,1) = 0.0;
+		tempMatA(3,2) = 0.0;
+		tempMatA(3,3) = 0.0;
+		tempMatA(3,4) = 1.0;
+		
+		tempMatA(4,0) = -1.128;
+		tempMatA(4,1) = -2.65;
+		tempMatA(4,2) = -0.1236;
+		tempMatA(4,3) = -0.3903;
+		tempMatA(4,4) = -0.4834;
+
 		controlZ.setA(tempMatA);
 		
 		TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempMatB(sZ,iZ);
-		tempMatB(0,0) = 1.0;
-		tempMatB(1,0) = 0.0;
+		tempMatB(0,0) = 0.01129;
+		tempMatB(1,0) = 0.0581;
+		tempMatB(2,0) = 0.0;
+		tempMatB(3,0) = 0.0;
+		tempMatB(4,0) = 0.0;
 		controlZ.setB(tempMatB);
 		
 		TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempMatC(oZ,sZ);
-		tempMatC(0,0) = 0.0;
-		tempMatC(0,1) = 1.0;
+		tempMatC(0,0) = -1.128;
+		tempMatC(0,1) = -2.65;
+		tempMatC(0,2) = -0.1236;
+		tempMatC(0,3) = -0.3903;
+		tempMatC(0,4) = -0.4834;
 		controlZ.setC(tempMatC);
 		
 		TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempMatD(oZ,iZ);
@@ -266,6 +297,8 @@ int main(int argc, char **argv)
 	TooN::Vector<4, double> ptamRot;
 	TooN::Vector<3, double> ptamVel;			//the current velocity as reported by PTAM(NED) (this is a basic backwards diff.)
 	double ptamYaw;								//the current yaw as reported by Vicon(NED)
+	
+	TooN::Vector<3, double> prevPos = TooN::makeVector(0.0,0.0,0.0);		//Storage for previous loop position
 
 	//Flags to control loops, flow, and initialisations
 	int PTAM_OK = 0;			//Flag to break out of PTAM control back to the original, very stable, Vicon safety controller. 1=PTAM control, 0=Vicon control.
@@ -331,7 +364,7 @@ int main(int argc, char **argv)
 
 	//The timing is controled by a ros::rate object. The argument is the desired loop rate in Hz. 
 	//Note this must be faster than the waypoint transition times.
-	ros::Rate rateLimiter(100);
+	ros::Rate rateLimiter(10);
 	
 	//Get the waypoints from file, and set the flight start time
 	waypoint_info.readWaypointData();
@@ -351,7 +384,13 @@ int main(int argc, char **argv)
 			std_msgs::Empty tempMsg;
 			pub_takeoff.publish(tempMsg);
 		}		
+		takeOffInit = 1;
 	}
+	
+	double tempXcmd = 0.0;
+	double tempYcmd = 0.0;
+	double tempZcmd = 0.0;
+	double tempWcmd = 0.0;
 	
 	//Main loop. Loop until last waypoint, then land.
 	while (ros::ok() && (landingNow==0))
@@ -407,6 +446,7 @@ int main(int argc, char **argv)
 			refer_ned.angular.z = referenceYaw;
 			pub_refer_ned.publish(refer_ned);
 			
+			//Optional first order velocities
 			if (0)
 			{
 				geometry_msgs::Twist vicon_vel;
@@ -431,7 +471,7 @@ int main(int argc, char **argv)
 		}
 
 		/**************************************************************
-		//PTAM STUFF
+		//PTAM initialisation motions
 		//at the start of the flight two motions need perforing,
 		//1) move to set a baseline for PTAM
 		//2) move to find a scale for PTAM
@@ -472,7 +512,6 @@ int main(int argc, char **argv)
 			ROS_INFO("flyvslam::PTAM Scale start");
 			ptamPos_one = ptamPos;
 			viconPos_one = viconPos;
-			
 			scaleInit = 1;
 		}
 		//If at the eighth waypoint (idx==7) then stop the scaling movement.
@@ -495,6 +534,7 @@ int main(int argc, char **argv)
 			scaleInit = 2;
 		}
 	    //If at the ninth waypoint (idx==8) then takeoff.
+	    //Only for the non-vicon initialisation.
 		if((waypoint_info.currentIdx==8) && (takeOffInit==0))
 		{
 			//If using the averaging method then this is the time to takeoff.
@@ -513,7 +553,7 @@ int main(int argc, char **argv)
 		//Once the ptam init has been completed create an
 		//average roll and pitch output of PTAM. Turn this into a 
 		//quaternion and send to the ptam correction.
-		if (ptamInit==2 && avgCount<50)
+		if (ptamInit==2 && avgCount<50 && (avgRollPitchCorr_on==1))
 		{
 			if ( ptamCheckPos != ptamPos)
 			{
@@ -682,7 +722,15 @@ int main(int argc, char **argv)
 					cmd_vel.linear.y = (-1)*tmp_vel_drone[1];		//Axis negated to make NED
 					cmd_vel.linear.z = (-1)*tmp_Z_cmd;				//Axis negated to make NED
 					cmd_vel.angular.z = (-1)*angErr;				//Axis negated to make NED
-					pub_cmd_vel.publish(cmd_vel);	
+					//This command doesn't issue a movement, but ensures the auto hover mode
+				    //is never enabled.
+				    cmd_vel.angular.x = 1;    
+					//pub_cmd_vel.publish(cmd_vel);	
+					
+					tempXcmd = cmd_vel.linear.x;
+					tempYcmd = cmd_vel.linear.y;
+					tempZcmd = cmd_vel.linear.z;
+					tempWcmd = cmd_vel.angular.z;
 				}
 				else
 				{
@@ -692,8 +740,16 @@ int main(int argc, char **argv)
 					cmd_vel.linear.x = 0;
 					cmd_vel.linear.y = 0;
 					cmd_vel.linear.z = 0;
+					cmd_vel.angular.x = 0;
+					cmd_vel.angular.y = 0;
 					cmd_vel.angular.z = 0;
-					pub_cmd_vel.publish(cmd_vel);	
+					//Sending all zeros activates the hover mode.
+					//pub_cmd_vel.publish(cmd_vel);	
+					
+					tempXcmd = cmd_vel.linear.x;
+					tempYcmd = cmd_vel.linear.y;
+					tempZcmd = cmd_vel.linear.z;
+					tempWcmd = cmd_vel.angular.z;
 				}
 			}
 			else
@@ -704,11 +760,19 @@ int main(int argc, char **argv)
 				cmd_vel.linear.y = (-1)*tmp_vel_drone[1];		//Axis negated to make NED
 				cmd_vel.linear.z = (-1)*tmp_Z_cmd;				//Axis negated to make NED
 				cmd_vel.angular.z = (-1)*angErr;				//Axis negated to make NED
+				//This command doesn't issue a movement, but ensures the auto hover mode
+				//is never enabled.
+				cmd_vel.angular.x = 1;                          
 				pub_cmd_vel.publish(cmd_vel);		
+				
+				tempXcmd = cmd_vel.linear.x;
+				tempYcmd = cmd_vel.linear.y;
+				tempZcmd = cmd_vel.linear.z;
+				tempWcmd = cmd_vel.angular.z;
 			}
 			
 		}
-		else if (LQG_OK==1)
+		if (LQG_OK==1)
 		{
 			/**************************************************************
 			//LQG/H2 Control
@@ -745,19 +809,19 @@ int main(int argc, char **argv)
 			{
 				TooN::Vector<TooN::Dynamic,double> tempInput(iY);
 				tempInput = TooN::makeVector(mavPosErr[1]);
-				tempOutputX = controlY.update(tempInput);
+				tempOutputY = controlY.update(tempInput);
 			}
 			{
 				TooN::Vector<TooN::Dynamic,double> tempInput(iZ);
 				tempInput = TooN::makeVector(mavPosErr[2]);
-				tempOutputX = controlZ.update(tempInput);
+				tempOutputZ = controlZ.update(tempInput);
 			}
 			{
 				TooN::Vector<TooN::Dynamic,double> tempInput(iW);
 				tempInput = TooN::makeVector(nedYawErr);
-				tempOutputX = controlW.update(tempInput);
+				tempOutputW = controlW.update(tempInput);
 			}
-			
+		
 			
 			//Fill in the control values to be sent to the MAV and send.
 			geometry_msgs::Twist cmd_vel;
@@ -765,10 +829,26 @@ int main(int argc, char **argv)
 			cmd_vel.linear.y  = (-1)*tempOutputY[0];		//Axis negated to make NED
 			cmd_vel.linear.z  = (-1)*tempOutputZ[0];		//Axis negated to make NED
 			cmd_vel.angular.z = (-1)*tempOutputW[0];		//Axis negated to make NED
-			pub_cmd_vel.publish(cmd_vel);	
 			
+			cmd_vel.linear.x  = tempXcmd;
+			cmd_vel.linear.y  = tempYcmd;					//Axis negated to make NED
+			cmd_vel.linear.z  = (1)*tempOutputZ[0];		//Axis negated to make NED
+			cmd_vel.angular.z = tempWcmd;					//Axis negated to make NED
+			//This command doesn't issue a movement, but ensures the auto hover mode
+			//is never enabled.
+			cmd_vel.angular.x = 1;  
+			
+			if ((viconPos[0] == prevPos[0]) && (viconPos[1] == prevPos[1]) && (viconPos[2] == prevPos[2]))
+			{
+				
+			}
+			else
+			{
+				pub_cmd_vel.publish(cmd_vel);	
+			}
 		}
 
+		prevPos = viconPos;
 
 		/**************************************************************
 		//CHECK STATUS' 

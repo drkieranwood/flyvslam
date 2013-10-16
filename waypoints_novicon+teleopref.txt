@@ -11,18 +11,21 @@
 0.0 0.0 -1.0        0.0 -1000.0 0.0         10.0
 
 #Start ptam init. and move
-0.0 0.0 -1.0        0.0 -1000.0 0.0         10.0
+0.0 0.0 -1.0        0.0 -1000.0 0.0         30.0
 
 #Stabilise at +1m offset and stop ptam init.
 1.0 0.0 -1.0        0.0 -1000.0 0.0         5.0
 1.0 0.0 -1.0        0.0 -1000.0 0.0         5.0
 
 #Grab position for scaling and move back
-1.0 0.0 -1.0        0.0 -1000.0 0.0         10.0
+1.0 0.0 -1.0        0.0 -1000.0 0.0         30.0
 0.0 0.0 -1.0        0.0 -1000.0 0.0         5.0
 
 #Grab position for scaling
-0.0 0.0 -1.0        0.0 -1000.0 0.0         5.0
+0.0 0.0 -1.0        0.0 -1000.0 0.0         20.0
+
+#Put on floor ready for take-off
+0.0 0.0 -1.0        0.0 -1000.0 0.0         10.0
 
 
 #At this point all initialisation has been completed, 
