@@ -46,8 +46,8 @@ int main(int argc, char **argv)
 	//Objects and variables
 	//=========================
 	int ptamControlOn = 1;
-	int avgRollPitchCorr_on = 0;
-	int LQG_OK=0;
+	int avgRollPitchCorr_on = 1;
+	int LQG_OK=1;
 	
 	//Create objects to store and handle vicon, ptam, and waypoint data.
 	vicon_data vicon_info;
@@ -57,11 +57,11 @@ int main(int argc, char **argv)
 	//Create control objects for X,Y,Z,W(yaw)
 	//Note the LQG is applied using the H2 method since it creates a 
 	//single state-space controller. The arguments are the number of [states,inputs,outputs]
-	int sX=2;
+	int sX=6;
 	int iX=1;
 	int oX=1;
 	
-	int sY=2;
+	int sY=6;
 	int iY=1;
 	int oY=1;
 	
@@ -82,60 +82,87 @@ int main(int argc, char **argv)
 	//Temporary matrices need to be created in order to set the rows and columns.
 	{
 		TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempMatA(sX,sX);
-		tempMatA(0,0) = 0.0;
+		tempMatA(0,0) = 0.4384;
 		tempMatA(0,1) = 0.0;
-		tempMatA(1,0) = 1.0;
-		tempMatA(1,1) = 0.0;
+		tempMatA(0,2) = -0.00498;
+		tempMatA(0,3) = 0.6755;
+		tempMatA(0,4) = 1.836;
+		tempMatA(0,5) = 0.0;
+		
+		tempMatA(1,0) = 0.06811;
+		tempMatA(1,1) = 1.0;
+		tempMatA(1,2) = -0.1417;
+		tempMatA(1,3) = 0.07864;
+		tempMatA(1,4) = 0.06401;
+		tempMatA(1,5) = 0.0;
+		
+		tempMatA(2,0) = 0.003868;
+		tempMatA(2,1) = 0.1;
+		tempMatA(2,2) = 0.825;
+		tempMatA(2,3) = 0.003637;
+		tempMatA(2,4) = 0.001426;
+		tempMatA(5,5) = 0.0;
+		
+		tempMatA(3,0) = 0.0;
+		tempMatA(3,1) = 0.0;
+		tempMatA(3,2) = 0.0;
+		tempMatA(3,3) = 0.0;
+		tempMatA(3,4) = 1.0;
+		tempMatA(3,5) = 0.0;
+		
+		tempMatA(4,0) = 0.0;
+		tempMatA(4,1) = 0.0;
+		tempMatA(4,2) = 0.0;
+		tempMatA(4,3) = 0.0;
+		tempMatA(4,4) = 0.0;
+		tempMatA(4,5) = 1.0;
+		
+		tempMatA(5,0) = -0.1705;
+		tempMatA(5,1) = -1.265;
+		tempMatA(5,2) = -0.9676;
+		tempMatA(5,3) = -0.2298;
+		tempMatA(5,4) = -0.7175;
+		tempMatA(5,5) = -0.9834;
 		controlX.setA(tempMatA);
+		controlY.setA(tempMatA);
 		
 		TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempMatB(sX,iX);
-		tempMatB(0,0) = 1.0;
-		tempMatB(1,0) = 0.0;
+		tempMatB(0,0) = 0.00498;
+		tempMatB(1,0) = 0.1417;
+		tempMatB(2,0) = 0.175;
+		tempMatB(3,0) = 0.0;
+		tempMatB(4,0) = 0.0;
+		tempMatB(5,0) = 0.0;
 		controlX.setB(tempMatB);
+		controlY.setB(tempMatB);
 		
 		TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempMatC(oX,sX);
-		tempMatC(0,0) = 0.0;
-		tempMatC(0,1) = 1.0;
+		tempMatC(0,0) = -0.1705;
+		tempMatC(0,1) = -1.265;
+		tempMatC(0,2) = -0.9676;
+		tempMatC(0,3) = -0.2298;
+		tempMatC(0,4) = -0.7175;
+		tempMatC(0,5) = -0.9834;
 		controlX.setC(tempMatC);
+		controlY.setC(tempMatC);
 		
 		TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempMatD(oX,iX);
 		tempMatD(0,0) = 0.0;
 		controlX.setD(tempMatD);
-	}
-	
-	{
-		TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempMatA(sY,sY);
-		tempMatA(0,0) = 0.0;
-		tempMatA(0,1) = 0.0;
-		tempMatA(1,0) = 1.0;
-		tempMatA(1,1) = 0.0;
-		controlY.setA(tempMatA);
-		
-		TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempMatB(sY,iY);
-		tempMatB(0,0) = 1.0;
-		tempMatB(1,0) = 0.0;
-		controlY.setB(tempMatB);
-		
-		TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempMatC(oY,sY);
-		tempMatC(0,0) = 0.0;
-		tempMatC(0,1) = 1.0;
-		controlY.setC(tempMatC);
-		
-		TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempMatD(oY,iY);
-		tempMatD(0,0) = 0.0;
 		controlY.setD(tempMatD);
 	}
+	
 	
 	{
 		TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempMatA(sZ,sZ);
 		tempMatA(0,0) = 0.6734;
-		tempMatA(0,1) = -0.01129;
-		tempMatA(0,2) = 0.07994;
+		tempMatA(0,1) = -0.003065;
+		tempMatA(0,2) = 0.07694;
 		tempMatA(0,3) = 0.1677;
 		tempMatA(0,4) = 0.0;
 		
 		tempMatA(1,0) = 0.0826;
-		tempMatA(1,1) = 0.9419;
+		tempMatA(1,1) = 0.9699;
 		tempMatA(1,2) = 0.007434;
 		tempMatA(1,3) = 0.005602;
 		tempMatA(1,4) = 0.0;
@@ -152,28 +179,28 @@ int main(int argc, char **argv)
 		tempMatA(3,3) = 0.0;
 		tempMatA(3,4) = 1.0;
 		
-		tempMatA(4,0) = -1.128;
-		tempMatA(4,1) = -2.65;
-		tempMatA(4,2) = -0.1236;
-		tempMatA(4,3) = -0.3903;
-		tempMatA(4,4) = -0.4834;
+		tempMatA(4,0) = -2.02;
+		tempMatA(4,1) = -4.357;
+		tempMatA(4,2) = -0.222;
+		tempMatA(4,3) = -0.7106;
+		tempMatA(4,4) = -0.897;
 
 		controlZ.setA(tempMatA);
 		
 		TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempMatB(sZ,iZ);
-		tempMatB(0,0) = 0.01129;
-		tempMatB(1,0) = 0.0581;
+		tempMatB(0,0) = 0.003065;
+		tempMatB(1,0) = 0.03013;
 		tempMatB(2,0) = 0.0;
 		tempMatB(3,0) = 0.0;
 		tempMatB(4,0) = 0.0;
 		controlZ.setB(tempMatB);
 		
 		TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempMatC(oZ,sZ);
-		tempMatC(0,0) = -1.128;
-		tempMatC(0,1) = -2.65;
-		tempMatC(0,2) = -0.1236;
-		tempMatC(0,3) = -0.3903;
-		tempMatC(0,4) = -0.4834;
+		tempMatC(0,0) = -2.02;
+		tempMatC(0,1) = -4.357;
+		tempMatC(0,2) = -0.222;
+		tempMatC(0,3) = -0.7106;
+		tempMatC(0,4) = -0.897;
 		controlZ.setC(tempMatC);
 		
 		TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempMatD(oZ,iZ);
@@ -184,14 +211,14 @@ int main(int argc, char **argv)
 	
 	{
 		TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempMatA(sW,sW);
-		tempMatA(0,0) = 0.1855;
-		tempMatA(0,1) = -0.00007813;
+		tempMatA(0,0) = 0.1885;
+		tempMatA(0,1) = -0.007141;
 		tempMatA(0,2) = 0.2371;
 		tempMatA(0,3) = 1.007;
 		tempMatA(0,4) = 0.0;
 		
 		tempMatA(1,0) = 0.04863;
-		tempMatA(1,1) = 0.9916;
+		tempMatA(1,1) = 0.9196;
 		tempMatA(1,2) = 0.04084;
 		tempMatA(1,3) = 0.03793;
 		tempMatA(1,4) = 0.0;
@@ -208,27 +235,27 @@ int main(int argc, char **argv)
 		tempMatA(3,3) = 0.0;
 		tempMatA(3,4) = 1.0;
 		
-		tempMatA(4,0) = -0.06134;
-		tempMatA(4,1) = -0.9289;
-		tempMatA(4,2) = -0.05829;
-		tempMatA(4,3) = -0.2108;
-		tempMatA(4,4) = -0.5051;
+		tempMatA(4,0) = -0.1889;
+		tempMatA(4,1) = -3.093;
+		tempMatA(4,2) = -0.1748;
+		tempMatA(4,3) = -0.5171;
+		tempMatA(4,4) = -0.7012;
 		controlW.setA(tempMatA);
 		
 		TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempMatB(sW,iW);
-		tempMatB(0,0) = 0.00007813;
-		tempMatB(1,0) = 0.00838;
+		tempMatB(0,0) = 0.007141;
+		tempMatB(1,0) = 0.0804;
 		tempMatB(2,0) = 0.0;
 		tempMatB(3,0) = 0.0;
 		tempMatB(4,0) = 0.0;
 		controlW.setB(tempMatB);
 		
 		TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempMatC(oW,sW);
-		tempMatC(0,0) = -0.06134;
-		tempMatC(0,1) = -0.9289;
-		tempMatC(0,2) = -0.05829;
-		tempMatC(0,3) = -0.2108;
-		tempMatC(0,4) = -0.5051;
+		tempMatC(0,0) = -0.1889;
+		tempMatC(0,1) = -3.093;
+		tempMatC(0,2) = -0.1748;
+		tempMatC(0,3) = -0.5171;
+		tempMatC(0,4) = -0.7012;
 		controlW.setC(tempMatC);
 		
 		TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempMatD(oW,iW);
@@ -396,6 +423,8 @@ int main(int argc, char **argv)
 	//The timing is controled by a ros::rate object. The argument is the desired loop rate in Hz. 
 	//Note this must be faster than the waypoint transition times.
 	ros::Rate rateLimiter(100);
+	int ctrlCount    = 0;
+	int ctrlCountMax = 10;
 	
 	//Get the waypoints from file, and set the flight start time
 	waypoint_info.readWaypointData();
@@ -531,7 +560,7 @@ int main(int argc, char **argv)
 				//Set a manual pose correction. The orientation correction is set to do nothing at the moment. 
 				//Hence the orientation output will be in the camera frame.
 				//This overwrites the one set by the setinitVicon() above.
-				TooN::Vector<3,double> initPosTemp = TooN::makeVector(0.5,-0.195,-1.0);
+				TooN::Vector<3,double> initPosTemp = TooN::makeVector(1.0,-0.195,-1.0);
 				TooN::Vector<4,double> initRotTemp = TooN::makeVector(1.0,0.0,0.0,0.0);
 				ptam_info.setInitGround(initPosTemp,initRotTemp);
 			}
@@ -560,7 +589,7 @@ int main(int argc, char **argv)
 			//using the dead reckoning estimate.
 			if (avgRollPitchCorr_on==1)
 			{
-				ptam_info.setPtamScale(double(2.0/ptamDist));
+				ptam_info.setPtamScale(double(1.0/ptamDist));
 			}
 			scaleInit = 2;
 		}
@@ -756,7 +785,7 @@ int main(int argc, char **argv)
 					//This command doesn't issue a movement, but ensures the auto hover mode
 				    //is never enabled.
 				    cmd_vel.angular.x = 1;    
-					pub_cmd_vel.publish(cmd_vel);	
+					//pub_cmd_vel.publish(cmd_vel);	
 					
 					tempXcmd = cmd_vel.linear.x;
 					tempYcmd = cmd_vel.linear.y;
@@ -775,7 +804,7 @@ int main(int argc, char **argv)
 					cmd_vel.angular.y = 0;
 					cmd_vel.angular.z = 0;
 					//Sending all zeros activates the hover mode.
-					pub_cmd_vel.publish(cmd_vel);	
+					//pub_cmd_vel.publish(cmd_vel);	
 					
 					tempXcmd = cmd_vel.linear.x;
 					tempYcmd = cmd_vel.linear.y;
@@ -794,7 +823,7 @@ int main(int argc, char **argv)
 				//This command doesn't issue a movement, but ensures the auto hover mode
 				//is never enabled.
 				cmd_vel.angular.x = 1;                          
-				pub_cmd_vel.publish(cmd_vel);		
+				//pub_cmd_vel.publish(cmd_vel);		
 				
 				tempXcmd = cmd_vel.linear.x;
 				tempYcmd = cmd_vel.linear.y;
@@ -805,76 +834,97 @@ int main(int argc, char **argv)
 		}
 		if (LQG_OK==1)
 		{
-			/**************************************************************
-			//LQG/H2 Control
-			//this uses the LQG/H2 optimal controller as a set of state-space 
-			//matrices which are updated once per-loop.
-			**************************************************************/
+			int runUpdate = 0;
 			
-			//===================
-			//Need to find the body frame errors in x,y,z,w
-			//===================
-			//error = reference - current
-			TooN::Vector<3,double> nedPosErr = referencePos-viconPos;
-			double nedYawErr = referenceYaw-viconYaw;
-			krot::r_wrap_pi(nedYawErr);   //wrap yaw error to (-PI:PI] so the MAV move the most direct direction
-			
-			//Rotate NED errors into the body frame.
-			TooN::Vector<3,double> mavPosErr = krot::r_apply_q(nedPosErr,viconRot);
-			
-			//At this point the inputs to the state-space lqg/h2 controllers have been found.
-			//[mavPosErr[0] mavPosErr[1] mavPosErr[2] nedYawErr]
-			
-			//===================
-			//Update the controllers.
-			//===================
-			TooN::Vector<TooN::Dynamic,double> tempOutputX(oX);
-			TooN::Vector<TooN::Dynamic,double> tempOutputY(oY);
-			TooN::Vector<TooN::Dynamic,double> tempOutputZ(oZ);
-			TooN::Vector<TooN::Dynamic,double> tempOutputW(oW);
+			//If ptam not active then increment the counter to run this once every 10 loops
+			if (PTAM_OK==0)
 			{
-				TooN::Vector<TooN::Dynamic,double> tempInput(iX);
-				tempInput = TooN::makeVector(mavPosErr[0]);
-				tempOutputX = controlX.update(tempInput);
-			}
-			{
-				TooN::Vector<TooN::Dynamic,double> tempInput(iY);
-				tempInput = TooN::makeVector(mavPosErr[1]);
-				tempOutputY = controlY.update(tempInput);
-			}
-			{
-				TooN::Vector<TooN::Dynamic,double> tempInput(iZ);
-				tempInput = TooN::makeVector(mavPosErr[2]);
-				tempOutputZ = controlZ.update(tempInput);
-			}
-			{
-				TooN::Vector<TooN::Dynamic,double> tempInput(iW);
-				tempInput = TooN::makeVector(nedYawErr);
-				tempOutputW = controlW.update(tempInput);
-			}
-		
-			
-			//Fill in the control values to be sent to the MAV and send.
-			geometry_msgs::Twist cmd_vel;
-			cmd_vel.linear.x  = tempOutputX[0];
-			cmd_vel.linear.y  = (-1)*tempOutputY[0];		//Axis negated to make NED
-			cmd_vel.linear.z  = (-1)*tempOutputZ[0];		//Axis negated to make NED
-			cmd_vel.angular.z = (-1)*tempOutputW[0];		//Axis negated to make NED
-			
-			cmd_vel.linear.x  = tempXcmd;
-			cmd_vel.linear.y  = tempYcmd;					//Axis negated to make NED
-			cmd_vel.linear.z  = (1)*tempOutputZ[0];		    //Axis negated to make NED
-			cmd_vel.angular.z = tempYcmd;					//Axis negated to make NED
-			//This command doesn't issue a movement, but ensures the auto hover mode
-			//is never enabled.
-			cmd_vel.angular.x = 1;  
-			
-			if ((viconPos[0] == prevPos[0]) && (viconPos[1] == prevPos[1]) && (viconPos[2] == prevPos[2]))
-			{
-				
+				if (ctrlCount==0)
+				{
+					runUpdate=1;
+				}
+				ctrlCount++;
+				if (ctrlCount==ctrlCountMax)
+				{
+					ctrlCount=0;
+				}
 			}
 			else
 			{
+				//PTAM Control has been activated but, only update if the
+				//PTAM position has changed and on PTAM control.
+				//The image rate is limited to 10Hz hence this will only run when a new PTAM 
+				//measurement is available at roughly 10Hz
+				if ((viconPos[0] == prevPos[0]) && (viconPos[1] == prevPos[1]) && (viconPos[2] == prevPos[2]) )
+				{
+					
+				}
+				else 
+				{
+					runUpdate=1;
+				}
+			}
+			if (runUpdate == 1)
+			{
+				/**************************************************************
+				//LQG/H2 Control
+				//this uses the LQG/H2 optimal controller as a set of state-space 
+				//matrices which are updated once per-loop.
+				**************************************************************/
+				
+				//===================
+				//Need to find the body frame errors in x,y,z,w
+				//===================
+				//error = reference - current
+				TooN::Vector<3,double> nedPosErr = referencePos-viconPos;
+				double nedYawErr = referenceYaw-viconYaw;
+				krot::r_wrap_pi(nedYawErr);   //wrap yaw error to (-PI:PI] so the MAV move the most direct direction
+				
+				//Rotate NED errors into the body frame.
+				TooN::Vector<3,double> mavPosErr = krot::r_apply_q(nedPosErr,viconRot);
+				
+				//At this point the inputs to the state-space lqg/h2 controllers have been found.
+				//[mavPosErr[0] mavPosErr[1] mavPosErr[2] nedYawErr]
+				
+				//===================
+				//Update the controllers.
+				//===================
+				TooN::Vector<TooN::Dynamic,double> tempOutputX(oX);
+				TooN::Vector<TooN::Dynamic,double> tempOutputY(oY);
+				TooN::Vector<TooN::Dynamic,double> tempOutputZ(oZ);
+				TooN::Vector<TooN::Dynamic,double> tempOutputW(oW);
+				{
+					TooN::Vector<TooN::Dynamic,double> tempInput(iX);
+					tempInput = TooN::makeVector(mavPosErr[0]);
+					tempOutputX = controlX.update(tempInput);
+				}
+				{
+					TooN::Vector<TooN::Dynamic,double> tempInput(iY);
+					tempInput = TooN::makeVector(mavPosErr[1]);
+					tempOutputY = controlY.update(tempInput);
+				}
+				{
+					TooN::Vector<TooN::Dynamic,double> tempInput(iZ);
+					tempInput = TooN::makeVector(mavPosErr[2]);
+					tempOutputZ = controlZ.update(tempInput);
+				}
+				{
+					TooN::Vector<TooN::Dynamic,double> tempInput(iW);
+					tempInput = TooN::makeVector(nedYawErr);
+					tempOutputW = controlW.update(tempInput);
+				}
+			
+				
+				//Fill in the control values to be sent to the MAV and send.
+				geometry_msgs::Twist cmd_vel;
+				
+				cmd_vel.linear.x  = (-1.0)*tempOutputX[0];
+				cmd_vel.linear.y  = (1.0)*tempOutputY[0];					//Axis negated to make NED
+				cmd_vel.linear.z  = (1.0)*tempOutputZ[0];		    //Axis negated to make NED
+				cmd_vel.angular.z = (1.0)*tempOutputW[0];		//Axis negated to make NED
+				//This command doesn't issue a movement, but ensures the auto hover mode
+				//is never enabled.
+				cmd_vel.angular.x = 1;  
 				pub_cmd_vel.publish(cmd_vel);	
 			}
 		}
