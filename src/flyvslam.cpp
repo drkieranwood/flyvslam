@@ -45,9 +45,9 @@ int main(int argc, char **argv)
 	//=========================
 	//Objects and variables
 	//=========================
-	int ptamControlOn = 0;
+	int ptamControlOn = 1;
 	int avgRollPitchCorr_on = 0;
-	int LQG_OK=1;
+	int LQG_OK=0;
 	
 	//Create objects to store and handle vicon, ptam, and waypoint data.
 	vicon_data vicon_info;
@@ -69,7 +69,7 @@ int main(int argc, char **argv)
 	int iZ=1;
 	int oZ=1;
 	
-	int sW=2;
+	int sW=5;
 	int iW=1;
 	int oW=1;
 	
@@ -184,20 +184,51 @@ int main(int argc, char **argv)
 	
 	{
 		TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempMatA(sW,sW);
-		tempMatA(0,0) = 0.0;
-		tempMatA(0,1) = 0.0;
-		tempMatA(1,0) = 1.0;
-		tempMatA(1,1) = 0.0;
+		tempMatA(0,0) = 0.1855;
+		tempMatA(0,1) = -0.00007813;
+		tempMatA(0,2) = 0.2371;
+		tempMatA(0,3) = 1.007;
+		tempMatA(0,4) = 0.0;
+		
+		tempMatA(1,0) = 0.04863;
+		tempMatA(1,1) = 0.9916;
+		tempMatA(1,2) = 0.04084;
+		tempMatA(1,3) = 0.03793;
+		tempMatA(1,4) = 0.0;
+		
+		tempMatA(2,0) = 0.0;
+		tempMatA(2,1) = 0.0;
+		tempMatA(2,2) = 0.0;
+		tempMatA(2,3) = 1.0;
+		tempMatA(2,4) = 0.0;
+		
+		tempMatA(3,0) = 0.0;
+		tempMatA(3,1) = 0.0;
+		tempMatA(3,2) = 0.0;
+		tempMatA(3,3) = 0.0;
+		tempMatA(3,4) = 1.0;
+		
+		tempMatA(4,0) = -0.06134;
+		tempMatA(4,1) = -0.9289;
+		tempMatA(4,2) = -0.05829;
+		tempMatA(4,3) = -0.2108;
+		tempMatA(4,4) = -0.5051;
 		controlW.setA(tempMatA);
 		
 		TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempMatB(sW,iW);
-		tempMatB(0,0) = 1.0;
-		tempMatB(1,0) = 0.0;
+		tempMatB(0,0) = 0.00007813;
+		tempMatB(1,0) = 0.00838;
+		tempMatB(2,0) = 0.0;
+		tempMatB(3,0) = 0.0;
+		tempMatB(4,0) = 0.0;
 		controlW.setB(tempMatB);
 		
 		TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempMatC(oW,sW);
-		tempMatC(0,0) = 0.0;
-		tempMatC(0,1) = 1.0;
+		tempMatC(0,0) = -0.06134;
+		tempMatC(0,1) = -0.9289;
+		tempMatC(0,2) = -0.05829;
+		tempMatC(0,3) = -0.2108;
+		tempMatC(0,4) = -0.5051;
 		controlW.setC(tempMatC);
 		
 		TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempMatD(oW,iW);
@@ -364,7 +395,7 @@ int main(int argc, char **argv)
 
 	//The timing is controled by a ros::rate object. The argument is the desired loop rate in Hz. 
 	//Note this must be faster than the waypoint transition times.
-	ros::Rate rateLimiter(10);
+	ros::Rate rateLimiter(100);
 	
 	//Get the waypoints from file, and set the flight start time
 	waypoint_info.readWaypointData();
@@ -725,7 +756,7 @@ int main(int argc, char **argv)
 					//This command doesn't issue a movement, but ensures the auto hover mode
 				    //is never enabled.
 				    cmd_vel.angular.x = 1;    
-					//pub_cmd_vel.publish(cmd_vel);	
+					pub_cmd_vel.publish(cmd_vel);	
 					
 					tempXcmd = cmd_vel.linear.x;
 					tempYcmd = cmd_vel.linear.y;
@@ -744,7 +775,7 @@ int main(int argc, char **argv)
 					cmd_vel.angular.y = 0;
 					cmd_vel.angular.z = 0;
 					//Sending all zeros activates the hover mode.
-					//pub_cmd_vel.publish(cmd_vel);	
+					pub_cmd_vel.publish(cmd_vel);	
 					
 					tempXcmd = cmd_vel.linear.x;
 					tempYcmd = cmd_vel.linear.y;
@@ -832,8 +863,8 @@ int main(int argc, char **argv)
 			
 			cmd_vel.linear.x  = tempXcmd;
 			cmd_vel.linear.y  = tempYcmd;					//Axis negated to make NED
-			cmd_vel.linear.z  = (1)*tempOutputZ[0];		//Axis negated to make NED
-			cmd_vel.angular.z = tempWcmd;					//Axis negated to make NED
+			cmd_vel.linear.z  = (1)*tempOutputZ[0];		    //Axis negated to make NED
+			cmd_vel.angular.z = tempYcmd;					//Axis negated to make NED
 			//This command doesn't issue a movement, but ensures the auto hover mode
 			//is never enabled.
 			cmd_vel.angular.x = 1;  
