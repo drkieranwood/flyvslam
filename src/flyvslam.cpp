@@ -26,6 +26,12 @@
 #include <r_apply_q.h>
 #define PI 3.14159265358979323846
 
+int startWaypointPlayback = 0;
+//Function to activate waypoint playback
+void waypointPlaybackCallback(const std_msgs::EmptyConstPtr& msg)
+{
+	startWaypointPlayback=1;
+}
 
 //Main flight control function. This does,
 //1)sets up the ptam, vicon, and waypoints objects,
@@ -46,8 +52,9 @@ int main(int argc, char **argv)
 	//Objects and variables
 	//=========================
 	int ptamControlOn = 1;
-	int avgRollPitchCorr_on = 1;
+	int avgRollPitchCorr_on = 0;
 	int LQG_OK=1;
+	int waypointPlayback_on = 1;
 	
 	//Create objects to store and handle vicon, ptam, and waypoint data.
 	vicon_data vicon_info;
@@ -415,6 +422,8 @@ int main(int argc, char **argv)
 	//Subscribe to the topic that sets the keyboard inputted reference position.
 	ros::Subscriber sub_teleopref = n.subscribe("/ref_pose", 1, &waypoint_data::updateFromKeys,&waypoint_info);
 
+	//Subscribe to the waypoint playback topic
+	ros::Subscriber sub_waypointPlayback = n.subscribe("/ref_playback", 1, waypointPlaybackCallback);
 
 	//=========================
 	//Timings
@@ -451,6 +460,31 @@ int main(int argc, char **argv)
 	double tempYcmd = 0.0;
 	double tempZcmd = 0.0;
 	double tempWcmd = 0.0;
+
+	
+	//A waypoint will attempt to be added every minWaypointTime seconds. If 
+	//either minWaypointDist or minWaypointYaw have not been exceeded since the last 
+	//waypoint then don't add another.
+	//Min time between waypoint collections
+	double minWaypointTime = 3.0;
+	//Min distance between waypoint collections
+	double minWaypointDist = 0.5;
+	//Min yaw between waypoint collections
+	double minWaypointYaw = PI/9.0;
+	//Playback time between waypoints
+	double waypointPlaybackTimeDiff = 4.0;
+	//Storage for the positions and yaw and times
+	TooN::Vector<3, double> waypointPlaybackPos[1000];
+	double waypointPlaybackYaw[1000];
+	ros::Time waypointPlaybackTime[1000];
+	//Waypoint count and playback start time
+	ros::Time waypointPlaybackChangeTime;
+	ros::Time waypointLastAdd = ros::Time::now();
+	int waypointCount = 0;
+	//Playback count
+	int waypointPlaybackCount = 0;
+	int firstWaypointPlayback = 0;
+
 	
 	//Main loop. Loop until last waypoint, then land.
 	while (ros::ok() && (landingNow==0))
@@ -475,6 +509,84 @@ int main(int argc, char **argv)
 		ptamRot = ptam_info.currentRot;
 		ptamVel = ptam_info.currentVel;
 		ptamYaw = ptam_info.currentYaw;
+		
+		if (waypointPlayback_on==1)
+		{
+			//If enough time has gone then consider adding a marker. And not in playback mode.
+			if ( (( (ros::Time::now() - waypointLastAdd).toSec() ) > minWaypointTime) && (startWaypointPlayback==0))
+			{
+				//If no waypoints then start the storage
+				if (waypointCount==0)
+				{
+					waypointPlaybackPos[waypointCount] = ptamPos;
+					waypointPlaybackYaw[waypointCount] = ptamYaw;
+					waypointPlaybackTime[waypointCount] = ros::Time::now();
+					waypointCount++;
+					ROS_INFO("flyvslam::Waypoint Added");
+				}
+				else
+				{
+					//Check the yaw or distance parameters
+					double distErrTempWp = TooN::norm( waypointPlaybackPos[waypointCount-1] - ptamPos);
+					double yawErrTempWp = waypointPlaybackYaw[waypointCount-1] - ptamYaw;
+					if ((distErrTempWp>minWaypointDist) || (yawErrTempWp>minWaypointYaw))
+					{
+						waypointPlaybackPos[waypointCount] = ptamPos;
+						waypointPlaybackYaw[waypointCount] = ptamYaw;
+						waypointPlaybackTime[waypointCount] = ros::Time::now();
+						waypointLastAdd = ros::Time::now();
+						waypointCount++;
+						ROS_INFO("flyvslam::Waypoint Added");
+					}
+				}
+			}
+		
+			//When the waypoint playback starts it should work from waypointCount-1 back to zero.
+			if (startWaypointPlayback == 1)
+			{
+				//If this is the first enter of this loop then set the time
+				if ((waypointPlaybackCount==0) && (firstWaypointPlayback==0))
+				{
+					firstWaypointPlayback=1;
+					waypointPlaybackChangeTime = ros::Time::now();
+					ROS_INFO("flyvslam::Playback started");
+				}
+				
+				//Need to lerp between [waypointCount-1] and [waypointCount-2] over waypointPlaybackTime seconds
+				//Check if the next waypoint should be selected
+				if ( ((ros::Time::now()-waypointPlaybackChangeTime).toSec()) > waypointPlaybackTimeDiff)
+				{
+					//Swap to next waypoint
+					waypointPlaybackCount++;
+					waypointPlaybackChangeTime = ros::Time::now();
+				}
+				
+				//Find current and next indexes
+				int curIdx = (waypointCount-1) - waypointPlaybackCount;
+				int nxtIdx = curIdx-1;
+				if (nxtIdx <0)
+				{
+					//If at the end then hold second to last last values
+					referencePos = waypointPlaybackPos[1];
+					referenceYaw = waypointPlaybackYaw[1];
+				}
+				else
+				{
+					//Find vec between current and next
+					TooN::Vector<3, double> tempWaypointDiffVec = waypointPlaybackPos[nxtIdx] - waypointPlaybackPos[curIdx];
+					double tempWaypointDiffYaw = waypointPlaybackYaw[nxtIdx] - waypointPlaybackYaw[curIdx];
+					//Find proportion of time between last chaneg and now as ration of waypointPlaybackTime
+					double tempLerpVal = ((ros::Time::now() - waypointPlaybackChangeTime).toSec())/waypointPlaybackTimeDiff;
+					//Lerp the new target pos
+					TooN::Vector<3, double> tempReferencePos = waypointPlaybackPos[curIdx] + tempWaypointDiffVec*tempLerpVal;
+					double  tempReferenceYaw = waypointPlaybackYaw[curIdx] + tempWaypointDiffYaw*tempLerpVal;
+					//Write these values as the reference position and yaw
+					referencePos = tempReferencePos;
+					referenceYaw = tempReferenceYaw;
+				}
+			}
+		}
+		
 
 
 		{
