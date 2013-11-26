@@ -26,12 +26,14 @@
 #include <r_apply_q.h>
 #define PI 3.14159265358979323846
 
-int startWaypointPlayback = 0;
+
 //Function to activate waypoint playback
+int waypointPlaybackActive = 0;
 void waypointPlaybackCallback(const std_msgs::EmptyConstPtr& msg)
 {
-	startWaypointPlayback=1;
+	waypointPlaybackActive=1;
 }
+
 
 //Main flight control function. This does,
 //1)sets up the ptam, vicon, and waypoints objects,
@@ -51,305 +53,67 @@ int main(int argc, char **argv)
 	//=========================
 	//Objects and variables
 	//=========================
-	int ptamControlOn = 1;
-	int avgRollPitchCorr_on = 0;
-	int LQG_OK=1;
-	int waypointPlayback_on = 1;
+	
+	//Flight options. These flag control which controllers, feedback, etc. should be used.
+	//Ideally they would be options in a GUI or command line parameters.
+	int ptamControl_on = 0;
+	int manualPtamInit_on = 0;
+	int lqgControl_on = 1;
+	int waypointPlayback_on = 0;
+	
 	
 	//Create objects to store and handle vicon, ptam, and waypoint data.
+	//These are the main input handlers that make the data available to the 
+	//control later.
 	vicon_data vicon_info;
 	ptam_data ptam_info;
 	waypoint_data waypoint_info;
 	
-	//Create control objects for X,Y,Z,W(yaw)
-	//Note the LQG is applied using the H2 method since it creates a 
-	//single state-space controller. The arguments are the number of [states,inputs,outputs]
-	int sX=6;
-	int iX=1;
-	int oX=1;
 	
-	int sY=6;
-	int iY=1;
-	int oY=1;
+	//Flags to control loops, flow, and initialisations.
+	//Some of these indicate when tasks have been completed and others,
+	//are tolerances to swap between controls emergency actions.
+	int usePtamFeedback_on = 0;	//Flag to break out of PTAM control back to the original, very stable, Vicon safety controller. 1=PTAM control, 0=Vicon control.
+	int landingNow = 0;			//Flag to indicate the last waypoint has been reached and landing should occur. Can be used by other code to induce a landing at any time.
+	int ptamInit = 0;			//Flag to control the PTAM baseline initilisation. When complete this is set to 2.
+	int scaleInit = 0;			//Flag to control the PTAM scale initilisation. When complete this is set to 2.
+	int takeOffInit = 0;
 	
-	int sZ=5;
-	int iZ=1;
-	int oZ=1;
 	
-	int sW=5;
-	int iW=1;
-	int oW=1;
-	
-	lqg_control controlX(sX,iX,oX);
-	lqg_control controlY(sY,iY,oY);
-	lqg_control controlZ(sZ,iZ,oZ);
-	lqg_control controlW(sW,iW,oW);
-	
-	//Set the matrices for the controllers. 
-	//Temporary matrices need to be created in order to set the rows and columns.
+	//Create a set of LQG controllers (in the H2 state-space form).
+	ROS_INFO("flyvslam::Read control gains X");
+	lqg_control * controlX = loadControlGainsFromFile("../controlgains/controlX");
+	ROS_INFO("flyvslam::Read control gains Y");
+	lqg_control * controlY = loadControlGainsFromFile("../controlgains/controlY");
+	ROS_INFO("flyvslam::Read control gains Z");
+	lqg_control * controlZ = loadControlGainsFromFile("../controlgains/controlZ");
+	ROS_INFO("flyvslam::Read control gains W");
+	lqg_control * controlW = loadControlGainsFromFile("../controlgains/controlW");
+	//If any controllers failed then do not take-off
+	if ((controlX==NULL) || (controlY==NULL) || (controlZ==NULL) || (controlW==NULL))
 	{
-		TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempMatA(sX,sX);
-		tempMatA(0,0) = 0.4384;
-		tempMatA(0,1) = 0.0;
-		tempMatA(0,2) = -0.00498;
-		tempMatA(0,3) = 0.6755;
-		tempMatA(0,4) = 1.836;
-		tempMatA(0,5) = 0.0;
-		
-		tempMatA(1,0) = 0.06811;
-		tempMatA(1,1) = 1.0;
-		tempMatA(1,2) = -0.1417;
-		tempMatA(1,3) = 0.07864;
-		tempMatA(1,4) = 0.06401;
-		tempMatA(1,5) = 0.0;
-		
-		tempMatA(2,0) = 0.003868;
-		tempMatA(2,1) = 0.1;
-		tempMatA(2,2) = 0.825;
-		tempMatA(2,3) = 0.003637;
-		tempMatA(2,4) = 0.001426;
-		tempMatA(5,5) = 0.0;
-		
-		tempMatA(3,0) = 0.0;
-		tempMatA(3,1) = 0.0;
-		tempMatA(3,2) = 0.0;
-		tempMatA(3,3) = 0.0;
-		tempMatA(3,4) = 1.0;
-		tempMatA(3,5) = 0.0;
-		
-		tempMatA(4,0) = 0.0;
-		tempMatA(4,1) = 0.0;
-		tempMatA(4,2) = 0.0;
-		tempMatA(4,3) = 0.0;
-		tempMatA(4,4) = 0.0;
-		tempMatA(4,5) = 1.0;
-		
-		tempMatA(5,0) = -0.1705;
-		tempMatA(5,1) = -1.265;
-		tempMatA(5,2) = -0.9676;
-		tempMatA(5,3) = -0.2298;
-		tempMatA(5,4) = -0.7175;
-		tempMatA(5,5) = -0.9834;
-		controlX.setA(tempMatA);
-		controlY.setA(tempMatA);
-		
-		TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempMatB(sX,iX);
-		tempMatB(0,0) = 0.00498;
-		tempMatB(1,0) = 0.1417;
-		tempMatB(2,0) = 0.175;
-		tempMatB(3,0) = 0.0;
-		tempMatB(4,0) = 0.0;
-		tempMatB(5,0) = 0.0;
-		controlX.setB(tempMatB);
-		controlY.setB(tempMatB);
-		
-		TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempMatC(oX,sX);
-		tempMatC(0,0) = -0.1705;
-		tempMatC(0,1) = -1.265;
-		tempMatC(0,2) = -0.9676;
-		tempMatC(0,3) = -0.2298;
-		tempMatC(0,4) = -0.7175;
-		tempMatC(0,5) = -0.9834;
-		controlX.setC(tempMatC);
-		controlY.setC(tempMatC);
-		
-		TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempMatD(oX,iX);
-		tempMatD(0,0) = 0.0;
-		controlX.setD(tempMatD);
-		controlY.setD(tempMatD);
+		landingNow=1;
 	}
 	
-	
-	{
-		TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempMatA(sZ,sZ);
-		tempMatA(0,0) = 0.6734;
-		tempMatA(0,1) = -0.003065;
-		tempMatA(0,2) = 0.07694;
-		tempMatA(0,3) = 0.1677;
-		tempMatA(0,4) = 0.0;
-		
-		tempMatA(1,0) = 0.0826;
-		tempMatA(1,1) = 0.9699;
-		tempMatA(1,2) = 0.007434;
-		tempMatA(1,3) = 0.005602;
-		tempMatA(1,4) = 0.0;
-		
-		tempMatA(2,0) = 0.0;
-		tempMatA(2,1) = 0.0;
-		tempMatA(2,2) = 0.0;
-		tempMatA(2,3) = 1.0;
-		tempMatA(2,4) = 0.0;
-		
-		tempMatA(3,0) = 0.0;
-		tempMatA(3,1) = 0.0;
-		tempMatA(3,2) = 0.0;
-		tempMatA(3,3) = 0.0;
-		tempMatA(3,4) = 1.0;
-		
-		tempMatA(4,0) = -2.02;
-		tempMatA(4,1) = -4.357;
-		tempMatA(4,2) = -0.222;
-		tempMatA(4,3) = -0.7106;
-		tempMatA(4,4) = -0.897;
-
-		controlZ.setA(tempMatA);
-		
-		TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempMatB(sZ,iZ);
-		tempMatB(0,0) = 0.003065;
-		tempMatB(1,0) = 0.03013;
-		tempMatB(2,0) = 0.0;
-		tempMatB(3,0) = 0.0;
-		tempMatB(4,0) = 0.0;
-		controlZ.setB(tempMatB);
-		
-		TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempMatC(oZ,sZ);
-		tempMatC(0,0) = -2.02;
-		tempMatC(0,1) = -4.357;
-		tempMatC(0,2) = -0.222;
-		tempMatC(0,3) = -0.7106;
-		tempMatC(0,4) = -0.897;
-		controlZ.setC(tempMatC);
-		
-		TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempMatD(oZ,iZ);
-		tempMatD(0,0) = 0.0;
-		controlZ.setD(tempMatD);
-	}
+	int iX = controlX->getNumInputs();
+	int iY = controlY->getNumInputs();
+	int iZ = controlZ->getNumInputs();
+	int iW = controlW->getNumInputs();
+	int oX = controlX->getNumOutputs();
+	int oY = controlY->getNumOutputs();
+	int oZ = controlZ->getNumOutputs();
+	int oW = controlW->getNumOutputs();
 	
 	
-	{
-		TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempMatA(sW,sW);
-		tempMatA(0,0) = 0.1885;
-		tempMatA(0,1) = -0.007141;
-		tempMatA(0,2) = 0.2371;
-		tempMatA(0,3) = 1.007;
-		tempMatA(0,4) = 0.0;
-		
-		tempMatA(1,0) = 0.04863;
-		tempMatA(1,1) = 0.9196;
-		tempMatA(1,2) = 0.04084;
-		tempMatA(1,3) = 0.03793;
-		tempMatA(1,4) = 0.0;
-		
-		tempMatA(2,0) = 0.0;
-		tempMatA(2,1) = 0.0;
-		tempMatA(2,2) = 0.0;
-		tempMatA(2,3) = 1.0;
-		tempMatA(2,4) = 0.0;
-		
-		tempMatA(3,0) = 0.0;
-		tempMatA(3,1) = 0.0;
-		tempMatA(3,2) = 0.0;
-		tempMatA(3,3) = 0.0;
-		tempMatA(3,4) = 1.0;
-		
-		tempMatA(4,0) = -0.1889;
-		tempMatA(4,1) = -3.093;
-		tempMatA(4,2) = -0.1748;
-		tempMatA(4,3) = -0.5171;
-		tempMatA(4,4) = -0.7012;
-		controlW.setA(tempMatA);
-		
-		TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempMatB(sW,iW);
-		tempMatB(0,0) = 0.007141;
-		tempMatB(1,0) = 0.0804;
-		tempMatB(2,0) = 0.0;
-		tempMatB(3,0) = 0.0;
-		tempMatB(4,0) = 0.0;
-		controlW.setB(tempMatB);
-		
-		TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempMatC(oW,sW);
-		tempMatC(0,0) = -0.1889;
-		tempMatC(0,1) = -3.093;
-		tempMatC(0,2) = -0.1748;
-		tempMatC(0,3) = -0.5171;
-		tempMatC(0,4) = -0.7012;
-		controlW.setC(tempMatC);
-		
-		TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempMatD(oW,iW);
-		tempMatD(0,0) = 0.0;
-		controlW.setD(tempMatD);
-	}
+			/*
+			//Test it worked
+			std::cout << "START TEST" << std::endl;
+			TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempA = ctrlX->getA();
+			std::cout << tempA(0,0) << " " << tempA(0,1) << " " << tempA(0,2) << std::endl;
+			std::cout << "END TEST" << std::endl;
+			* */
 	
 	
-	
-/*
-    //This is to test the state-space equations are being evaluated correctly.
-    //The update function is called 5 times with a single input [1,2,3,4,5]
-	TooN::Vector<TooN::Dynamic,double> tempInp(1);
-	TooN::Vector<TooN::Dynamic,double> tempOut(1);
-	tempInp = TooN::makeVector(1.0);
-	tempOut = controlX.update(tempInp);
-	std::cout << tempInp[0] << " " << tempOut[0] << std::endl;
-	
-	tempInp = TooN::makeVector(2.0);
-	tempOut = controlX.update(tempInp);
-	std::cout << tempInp[0] << " " << tempOut[0] << std::endl;
-	
-	tempInp = TooN::makeVector(3.0);
-	tempOut = controlX.update(tempInp);
-	std::cout << tempInp[0] << " " << tempOut[0] << std::endl;
-	
-	tempInp = TooN::makeVector(4.0);
-	tempOut = controlX.update(tempInp);
-	std::cout << tempInp[0] << " " << tempOut[0] << std::endl;
-
-	tempInp = TooN::makeVector(5.0);
-	tempOut = controlX.update(tempInp);
-	std::cout << tempInp[0] << " " << tempOut[0] << std::endl;
-	
-
-	//This is to check the LQG control matrices were being set correctly.
-	//The setM() command is used above and the getM() command is used here.
-	//Note how the get() command sucessfully sizes the tempM dynamic matrices.
-	TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempA = controlX.getA();
-	std::cout << tempA(0,0) << " " << tempA(0,1) << " " << tempA(0,2) << std::endl;
-	//std::cout << tempA(1,0) << " " << tempA(1,1) << " " << tempA(1,2) << std::endl;
-	//std::cout << tempA(2,0) << " " << tempA(2,1) << " " << tempA(2,2) << std::endl;
-	
-	TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempB = controlX.getB();
-	std::cout << tempB(0,0) << " " << tempB(1,0) << " " << tempB(2,0) << std::endl;
-	
-	TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempC = controlX.getC();
-	std::cout << tempC(0,0) << " " << tempC(0,1) << " " << tempC(0,2) << std::endl;
-	
-	TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempD = controlX.getD();
-	std::cout << tempD(0,0) << std::endl;
-*/
-
-	/*
-	{
-		TooN::Matrix<3,3,double> tempMatA =  TooN::Data(0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0);
-		controlY.setA(tempMatA);
-		TooN::Matrix<3,1,double> tempMatB =  TooN::Data(0.0,0.0,0.0);
-		controlY.setB(tempMatB);
-		TooN::Matrix<1,3,double> tempMatC =  TooN::Data(0.0,0.0,0.0);
-		controlY.setC(tempMatC);
-		TooN::Matrix<1,1,double> tempMatD =  TooN::Data(0.0);
-		controlY.setD(tempMatD);
-	}
-	{
-		TooN::Matrix<3,3,double> tempMatA =  TooN::Data(0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0);
-		controlZ.setA(tempMatA);
-		TooN::Matrix<3,1,double> tempMatB =  TooN::Data(0.0,0.0,0.0);
-		controlZ.setB(tempMatB);
-		TooN::Matrix<1,3,double> tempMatC =  TooN::Data(0.0,0.0,0.0);
-		controlZ.setC(tempMatC);
-		TooN::Matrix<1,1,double> tempMatD =  TooN::Data(0.0);
-		controlZ.setD(tempMatD);
-	}
-	{
-		TooN::Matrix<3,3,double> tempMatA =  TooN::Data(0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0);
-		controlX.setA(tempMatA);
-		TooN::Matrix<3,1,double> tempMatB =  TooN::Data(0.0,0.0,0.0);
-		controlX.setB(tempMatB);
-		TooN::Matrix<1,3,double> tempMatC =  TooN::Data(0.0,0.0,0.0);
-		controlX.setC(tempMatC);
-		TooN::Matrix<1,1,double> tempMatD =  TooN::Data(0.0);
-		controlX.setD(tempMatD);
-	}
-	*/
-	
-
 	//Some helpful variables. These just extract and store a direct copy of data available in 
 	//the vicon, ptam, and waypoint objects, to make the later code look cleaner.
 	TooN::Vector<3, double> referencePos;		//the current desired position
@@ -362,26 +126,17 @@ int main(int argc, char **argv)
 	TooN::Vector<4, double> ptamRot;
 	TooN::Vector<3, double> ptamVel;			//the current velocity as reported by PTAM(NED) (this is a basic backwards diff.)
 	double ptamYaw;								//the current yaw as reported by Vicon(NED)
-	
-	TooN::Vector<3, double> prevPos = TooN::makeVector(0.0,0.0,0.0);		//Storage for previous loop position
+	TooN::Vector<3, double> prevPos = TooN::makeVector(0.0,0.0,0.0);		//Storage for previous loop position. Allows checks for non-changing inputs.
 
-	//Flags to control loops, flow, and initialisations
-	int PTAM_OK = 0;			//Flag to break out of PTAM control back to the original, very stable, Vicon safety controller. 1=PTAM control, 0=Vicon control.
-	int landingNow = 0;			//Flag to indicate the last waypoint has been reached and landing should occur. Can be used by other code to induce a landing at any time.
-	int ptamInit = 0;			//Flag to control the PTAM baseline initilisation. When complete this is set to 2.
-	int scaleInit = 0;			//Flag to control the PTAM scale initilisation. When complete this is set to 2.
-	int stepOn = 0;
-	double ptamViconTol = 0.2;  //Toleracne between Vicon and PTAM positions
-	int ptamCheck = 0;
-	int takeOffInit = 0;
 	
-	//Storage for sample values used to calculate the scale. 
+	//Storage for instantaneous position sample values used to calculate the scale. 
 	TooN::Vector<3, double> ptamPos_one;
 	TooN::Vector<3, double> ptamPos_two;
 	TooN::Vector<3, double> viconPos_one;
 	TooN::Vector<3, double> viconPos_two;
 	
-	//The average roll and pitch and count of included measurements
+	
+	//Variables to find the average roll and pitch.
 	double avgRoll  = 0.0;
 	double avgPitch = 0.0;
 	int avgCount = 0;
@@ -425,28 +180,51 @@ int main(int argc, char **argv)
 	//Subscribe to the waypoint playback topic
 	ros::Subscriber sub_waypointPlayback = n.subscribe("/ref_playback", 1, waypointPlaybackCallback);
 
+
+	//=========================
+	//Waypoint playback
+	//=========================
+	//A waypoint will attempt to be added every minWaypointTime seconds. If 
+	//either minWaypointDist or minWaypointYaw have not been exceeded since the last 
+	//waypoint then don't add another.
+	double minWaypointAddTime = 3.0;						//Min time between waypoint collections
+	double minWaypointDist = 0.5;							//Min distance between waypoint collections
+	double minWaypointYaw = PI/9.0;							//Min yaw between waypoint collections
+	ros::Time waypointLastAdd = ros::Time::now();			//The time at which the last waypoint was added
+	
+	TooN::Vector<3, double> waypointPlaybackPos[1000];		//Storage for the positions and yaw and times
+	double waypointPlaybackYaw[1000];
+	ros::Time waypointPlaybackTime[1000];
+	
+	double waypointPlaybackTimeDiff = 4.0;					//Playback time between waypoints. This is the speed of motion.
+	ros::Time waypointPlaybackChangeTime;					//Time when last waypoint was changed.
+
+	int waypointCount = 0;									//Total waypoints collected
+	int waypointPlaybackCount = 0;							//Total waypoints played back so far
+	int firstWaypointPlayback = 0;							//Flag to indicate the first playback iteration.
+
+
 	//=========================
 	//Timings
 	//=========================
 
 	//The timing is controled by a ros::rate object. The argument is the desired loop rate in Hz. 
-	//Note this must be faster than the waypoint transition times.
+	//Note this must be faster than the waypoint transition times. A counter system is used to make
+	//the control evaluate at a lower rate. The control will evaluate every ctrlCountMax iterations
+	//of the main ROS loop.
 	ros::Rate rateLimiter(100);
 	int ctrlCount    = 0;
 	int ctrlCountMax = 10;
 	
-	//Get the waypoints from file, and set the flight start time
-	waypoint_info.readWaypointData();
-	waypoint_info.start_time = ros::Time::now();
-	waypoint_info.waypoint_time = ros::Time::now();
 
-	//Send the takeoff command after a 2 second delay. To allow all ROS init. processes to complete.
+	//Send the take-off command after a 2 second delay. To allow all ROS init. processes to complete.
 	ros::Duration sleepone = ros::Duration(1,0);
 	sleepone.sleep();
 	sleepone.sleep();
 	
-	//If not using the average roll and pitch method then take-off now.
-	if (avgRollPitchCorr_on==0)
+	//If not using the average roll and pitch method then take-off now,
+	//else take-off is after then manual init procedure.
+	if (manualPtamInit_on==0)
 	{
 		ROS_INFO("flyvslam::TAKEOFF");
 		{
@@ -456,37 +234,15 @@ int main(int argc, char **argv)
 		takeOffInit = 1;
 	}
 	
-	double tempXcmd = 0.0;
-	double tempYcmd = 0.0;
-	double tempZcmd = 0.0;
-	double tempWcmd = 0.0;
-
+	//Get the waypoints from file, and set the flight start time
+	waypoint_info.readWaypointData();
+	waypoint_info.start_time = ros::Time::now();
+	waypoint_info.waypoint_time = ros::Time::now();
 	
-	//A waypoint will attempt to be added every minWaypointTime seconds. If 
-	//either minWaypointDist or minWaypointYaw have not been exceeded since the last 
-	//waypoint then don't add another.
-	//Min time between waypoint collections
-	double minWaypointTime = 3.0;
-	//Min distance between waypoint collections
-	double minWaypointDist = 0.5;
-	//Min yaw between waypoint collections
-	double minWaypointYaw = PI/9.0;
-	//Playback time between waypoints
-	double waypointPlaybackTimeDiff = 4.0;
-	//Storage for the positions and yaw and times
-	TooN::Vector<3, double> waypointPlaybackPos[1000];
-	double waypointPlaybackYaw[1000];
-	ros::Time waypointPlaybackTime[1000];
-	//Waypoint count and playback start time
-	ros::Time waypointPlaybackChangeTime;
-	ros::Time waypointLastAdd = ros::Time::now();
-	int waypointCount = 0;
-	//Playback count
-	int waypointPlaybackCount = 0;
-	int firstWaypointPlayback = 0;
 
 	
 	//Main loop. Loop until last waypoint, then land.
+	//Landing can be initiated at any time by setting landingNow=1.
 	while (ros::ok() && (landingNow==0))
 	{	
 		/**************************************************************
@@ -504,48 +260,64 @@ int main(int argc, char **argv)
 		viconYaw = vicon_info.currentYaw;
 
 		//Update the current position, velocity, and yaw from PTAM.
-		//These will be zeros for the first part of the flight, then arbirarily scaled, then become NED once the scale has been set.
+		//These will be zeros for the first part of the flight, then arbirarily scaled, 
+		//then become NED once the scale has been set.
 		ptamPos = ptam_info.currentPos;
 		ptamRot = ptam_info.currentRot;
 		ptamVel = ptam_info.currentVel;
 		ptamYaw = ptam_info.currentYaw;
 		
+		
+		/**************************************************************
+		//WAYPOINT PLAYBACK
+		//This section collects waypoints during the flight then overwrites 
+		//reference with the reverse route when activated. It make use of the
+		//data just collected and can overwrite referencePos and referenceYaw.
+		**************************************************************/
 		if (waypointPlayback_on==1)
 		{
-			//If enough time has gone then consider adding a marker. And not in playback mode.
-			if ( (( (ros::Time::now() - waypointLastAdd).toSec() ) > minWaypointTime) && (startWaypointPlayback==0))
+			
+			//========================	
+			//Collect
+			//========================
+			//If enough time has elapsed then consider adding a marker, and when not in playback mode.
+			//The total waypoints in the storage is (waypointCount-1)
+			if ( (( (ros::Time::now() - waypointLastAdd).toSec() ) > minWaypointAddTime) && (waypointPlaybackActive==0))
 			{
-				//If no waypoints then start the storage
+				//If no waypoints then start the storage with current position.
 				if (waypointCount==0)
 				{
-					waypointPlaybackPos[waypointCount] = ptamPos;
-					waypointPlaybackYaw[waypointCount] = ptamYaw;
+					waypointPlaybackPos[waypointCount]  = ptamPos;
+					waypointPlaybackYaw[waypointCount]  = ptamYaw;
 					waypointPlaybackTime[waypointCount] = ros::Time::now();
 					waypointCount++;
-					ROS_INFO("flyvslam::Waypoint Added");
+					ROS_INFO("flyvslam::Playback waypoint Added");
 				}
 				else
 				{
-					//Check the yaw or distance parameters
+					//Check to see if the MAV has moved or yawed far enough.
 					double distErrTempWp = TooN::norm( waypointPlaybackPos[waypointCount-1] - ptamPos);
 					double yawErrTempWp = waypointPlaybackYaw[waypointCount-1] - ptamYaw;
-					if ((distErrTempWp>minWaypointDist) || (yawErrTempWp>minWaypointYaw))
+					if ( (distErrTempWp>minWaypointDist) || (yawErrTempWp>minWaypointYaw) )
 					{
-						waypointPlaybackPos[waypointCount] = ptamPos;
-						waypointPlaybackYaw[waypointCount] = ptamYaw;
+						waypointPlaybackPos[waypointCount]  = ptamPos;
+						waypointPlaybackYaw[waypointCount]  = ptamYaw;
 						waypointPlaybackTime[waypointCount] = ros::Time::now();
 						waypointLastAdd = ros::Time::now();
 						waypointCount++;
-						ROS_INFO("flyvslam::Waypoint Added");
+						ROS_INFO("flyvslam::Playback waypoint Added");
 					}
 				}
 			}
 		
-			//When the waypoint playback starts it should work from waypointCount-1 back to zero.
-			if (startWaypointPlayback == 1)
+			//========================	
+			//Playback
+			//========================
+			//When the waypoint playback starts it should work from (waypointCount-1) back to zero.
+			if (waypointPlaybackActive == 1)
 			{
-				//If this is the first enter of this loop then set the time
-				if ((waypointPlaybackCount==0) && (firstWaypointPlayback==0))
+				//If this is the first enter of this loop then set the time.
+				if (firstWaypointPlayback==0)
 				{
 					firstWaypointPlayback=1;
 					waypointPlaybackChangeTime = ros::Time::now();
@@ -590,7 +362,7 @@ int main(int argc, char **argv)
 
 
 		{
-			//Output the reference, Vicon, and PTAM, data as messages
+			//Output the reference, Vicon, and PTAM, data as messages for logging,
 			geometry_msgs::Twist vicon_ned;
 			vicon_ned.linear.x = viconPos[0];
 			vicon_ned.linear.y = viconPos[1];
@@ -642,6 +414,7 @@ int main(int argc, char **argv)
 			
 		}
 
+
 		/**************************************************************
 		//PTAM initialisation motions
 		//at the start of the flight two motions need perforing,
@@ -664,10 +437,11 @@ int main(int argc, char **argv)
 			std_msgs::String initCmd;
  			initCmd.data = "Space";
 			pub_ptaminit.publish(initCmd);
+			
 			//Set the initial Vicon pose for the PTAM to NED transformation.
 			ptam_info.setInitVicon(vicon_info.currentPos,vicon_info.currentRot);
 			
-			if (avgRollPitchCorr_on==1)
+			if (manualPtamInit_on==1)
 			{
 				//Set a manual pose correction. The orientation correction is set to do nothing at the moment. 
 				//Hence the orientation output will be in the camera frame.
@@ -695,13 +469,16 @@ int main(int argc, char **argv)
 			//Find magnitude of vectors from Vicon and PTAM, to calculate and set the scale for the PTAM to NED transformation.
 			double ptamDist  = TooN::norm(ptamPos_two - ptamPos_one);
 			double viconDist = TooN::norm(viconPos_two - viconPos_one);
-			ptam_info.setPtamScale(double(viconDist/ptamDist));
 			
 			//If using the no Vicon averaging method overwrtie the scale 
 			//using the dead reckoning estimate.
-			if (avgRollPitchCorr_on==1)
+			if (manualPtamInit_on==1)
 			{
 				ptam_info.setPtamScale(double(1.0/ptamDist));
+			}
+			else
+			{
+				ptam_info.setPtamScale(double(viconDist/ptamDist));
 			}
 			scaleInit = 2;
 		}
@@ -710,7 +487,7 @@ int main(int argc, char **argv)
 		if((waypoint_info.currentIdx==8) && (takeOffInit==0))
 		{
 			//If using the averaging method then this is the time to takeoff.
-			if (avgRollPitchCorr_on==1)
+			if (manualPtamInit_on==1)
 			{
 				ROS_INFO("flyvslam::TAKEOFF");
 				{
@@ -725,8 +502,9 @@ int main(int argc, char **argv)
 		//Once the ptam init has been completed create an
 		//average roll and pitch output of PTAM. Turn this into a 
 		//quaternion and send to the ptam correction.
-		if (ptamInit==2 && avgCount<50 && (avgRollPitchCorr_on==1))
+		if (ptamInit==2 && avgCount<51 && (manualPtamInit_on==1))
 		{
+			//Only perform if PTAM has output a new measurement.
 			if ( ptamCheckPos != ptamPos)
 			{
 				//Extract the roll and pitch from ptam
@@ -757,45 +535,41 @@ int main(int argc, char **argv)
 		//check if the PTAM data is near the Vicon data, if so then use the PTAM
 		//based controller, else break into the emergency controller.
 		**************************************************************/
-		
-		//Check if both the initilisations have been completed for PTAM. 
-		//Only think about activating PTAM control, once they are complete.
-		if (ptamInit==2 && scaleInit==2 && (ptamControlOn))
+		//PTAM can only be used as feedback once it is initialised with 
+		//scale and oreintation.
+		//Also check the user flag (ptamControl_on) to see if it is required at all.
+		if (ptamInit==2 && scaleInit==2 && (ptamControl_on))
 		{
-			if (PTAM_OK!=1)
+			if (usePtamFeedback_on!=1)
 			{
-					ROS_INFO("flyvslam::PTAM Control active");
-					PTAM_OK = 1;
+					ROS_INFO("flyvslam::PTAM Control activated");
+					usePtamFeedback_on = 1;
 			}	
 		}
 
-		if (PTAM_OK==1) //use PTAM controller. If inside the PTAM controller the PTAM_OK=0 flag is set, then the Vicon control will over-write.
+		//If PTAM is to be used as the feedback then simply over-write the Vicon
+		//positions etc with the PTAM data. All control calculations use viconPos, viconRot etc
+		//but the actual values might be from PTAM as set here.
+		//This is a little hacky but works.
+		if (usePtamFeedback_on==1)
 		{
-			/**************************************************************
-			//PTAM CONTROL
-			//use the incomming PTAM data in an LQG or Hinf controller. This loop rate is 100Hz 
-			//but rate throttling for PTAM is achieved by not updating the PTAM pose quickly, and 
-			//checking if the data has changed between loops.
-			**************************************************************/
-			//HACK:: if ptam data is ok then replace the vicon data with it.
-			//This means the controler below will use the ptam data
 			viconPos = ptamPos;
 			viconVel = ptamVel;
 			viconYaw = ptamYaw;
 			viconRot = ptamRot;
-			
-		} //PTAM_OK==1
-
-
-		if (1)
+		}
+	
+	
+	
+		/**************************************************************
+		//PID CONTROL
+		//pid control just uses the position and velocity estimates from 
+		//the inputs to implement a simple control.
+		**************************************************************/
+		//If not using the LQG then use a PID. This uses the full rate of
+		//feedback available.
+		if (!lqgControl_on)
 		{
-			/**************************************************************
-			//VICON CONTROL
-			//this is a safety controller used to rescue the MAV when things go wrong.
-			//to use it just set PTAM_OK=0 anywhere above and this control will over-write
-			//any previous one.
-			**************************************************************/
-
 			//========================	
 			//Rotational
 			//======================== 
@@ -828,7 +602,7 @@ int main(int argc, char **argv)
 			//PTAM  P=0.5, D=0.1
 			double propGainXY;
 			double diffGainXY;
-			if (PTAM_OK==1)
+			if (usePtamFeedback_on==1)
 			{
 				propGainXY = 0.3;
 				diffGainXY = 0.1; 
@@ -857,7 +631,7 @@ int main(int argc, char **argv)
 			//PTAM  P=0.8, D=0.3
 			double propGainZ;
 			double diffGainZ;
-			if (PTAM_OK==1)
+			if (usePtamFeedback_on==1)
 			{
 				propGainZ = 0.8;
 				diffGainZ = 0.3; 
@@ -875,38 +649,36 @@ int main(int argc, char **argv)
 
 
 			//========================	
-			//Transform and output
+			//Transform
 			//========================		
-
 			//Axis transform from Vicon to drone (z remains the same but is not used)
 			TooN::Vector<3, double> drone_axis_x  = TooN::makeVector(cos(viconYaw), sin(viconYaw),0); 
 			TooN::Vector<3, double> drone_axis_y  = TooN::makeVector(-sin(viconYaw), cos(viconYaw),0);
 			TooN::Vector<3, double> tmp_vel_drone = TooN::makeVector(tmp_vel*drone_axis_x,tmp_vel*drone_axis_y,0);
+			
+			//========================	
+			//Output
+			//========================	
 				
-			if (ptamControlOn==0)
-			{					
-				//Publish movement commands to drones ros topic.
-				//This is only performed if new Vicon data has been received in the last 1 second.
+			//When usign Vicon check to see if the MAV is out of bounds by 
+			//checking the last Vicon update time.
+			if (usePtamFeedback_on==0)
+			{			
 				if( (1.0) > ((ros::Time::now()-(vicon_info.vicon_last_update_time)).toSec()) )
 				{
+					//If using Vicon feedback only publish if Vicon has new data.	
 					geometry_msgs::Twist cmd_vel;
 					cmd_vel.linear.x = tmp_vel_drone[0];
 					cmd_vel.linear.y = (-1)*tmp_vel_drone[1];		//Axis negated to make NED
 					cmd_vel.linear.z = (-1)*tmp_Z_cmd;				//Axis negated to make NED
 					cmd_vel.angular.z = (-1)*angErr;				//Axis negated to make NED
-					//This command doesn't issue a movement, but ensures the auto hover mode
-				    //is never enabled.
+					//Setting angular.x =1 ensures MAV never enters hover mode using the on-board controller.
 				    cmd_vel.angular.x = 1;    
-					//pub_cmd_vel.publish(cmd_vel);	
-					
-					tempXcmd = cmd_vel.linear.x;
-					tempYcmd = cmd_vel.linear.y;
-					tempZcmd = cmd_vel.linear.z;
-					tempWcmd = cmd_vel.angular.z;
+					pub_cmd_vel.publish(cmd_vel);	
 				}
 				else
 				{
-					//Else no new Vicon data is available so send zeros
+					//Else no new Vicon data is available so send zeros to activate hover mode.
 					ROS_INFO("flyvslam::No new Vicon data or nan error. Sending [0,0,0,0]' vel_cmd");
 					geometry_msgs::Twist cmd_vel;
 					cmd_vel.linear.x = 0;
@@ -916,41 +688,41 @@ int main(int argc, char **argv)
 					cmd_vel.angular.y = 0;
 					cmd_vel.angular.z = 0;
 					//Sending all zeros activates the hover mode.
-					//pub_cmd_vel.publish(cmd_vel);	
+					pub_cmd_vel.publish(cmd_vel);	
 					
-					tempXcmd = cmd_vel.linear.x;
-					tempYcmd = cmd_vel.linear.y;
-					tempZcmd = cmd_vel.linear.z;
-					tempWcmd = cmd_vel.angular.z;
+
 				}
 			}
 			else
 			{
-				//If using ptam control then always publish the command
+				//When using PTAM feedback it doesn't matter if the MAV is outside Vicon
+				//so always publish the command.
 				geometry_msgs::Twist cmd_vel;
 				cmd_vel.linear.x = tmp_vel_drone[0];
 				cmd_vel.linear.y = (-1)*tmp_vel_drone[1];		//Axis negated to make NED
 				cmd_vel.linear.z = (-1)*tmp_Z_cmd;				//Axis negated to make NED
 				cmd_vel.angular.z = (-1)*angErr;				//Axis negated to make NED
-				//This command doesn't issue a movement, but ensures the auto hover mode
-				//is never enabled.
+				//Setting angular.x =1 ensures MAV never enters hover mode using the on-board controller.
 				cmd_vel.angular.x = 1;                          
-				//pub_cmd_vel.publish(cmd_vel);		
-				
-				tempXcmd = cmd_vel.linear.x;
-				tempYcmd = cmd_vel.linear.y;
-				tempZcmd = cmd_vel.linear.z;
-				tempWcmd = cmd_vel.angular.z;
+				pub_cmd_vel.publish(cmd_vel);		
 			}
-			
 		}
-		if (LQG_OK==1)
+		
+		
+		/**************************************************************
+		//LQG CONTROL
+		//a LQG/H2 control using a single state-space implementation for each axis.
+		**************************************************************/
+		//This is the state-space LQG controller. 
+		//Only evaluate if the LQG has been activated.
+		if (lqgControl_on==1)
 		{
+			//There are two different criteria for performing a control update.
+			//It is important to make usre the LQG is evaluated at the correct rate.
 			int runUpdate = 0;
-			
-			//If ptam not active then increment the counter to run this once every 10 loops
-			if (PTAM_OK==0)
+			if (usePtamFeedback_on==0)
 			{
+				//If using Vicon then update once per ctrlCountMax loops.
 				if (ctrlCount==0)
 				{
 					runUpdate=1;
@@ -963,19 +735,20 @@ int main(int argc, char **argv)
 			}
 			else
 			{
-				//PTAM Control has been activated but, only update if the
-				//PTAM position has changed and on PTAM control.
-				//The image rate is limited to 10Hz hence this will only run when a new PTAM 
-				//measurement is available at roughly 10Hz
+				//If using PTAM feedback then only update when the PTAM position has changed.
+				//The PTAM rate is limited externally by the image stream.
 				if ((viconPos[0] == prevPos[0]) && (viconPos[1] == prevPos[1]) && (viconPos[2] == prevPos[2]) )
 				{
-					
+						//Do nothing
 				}
 				else 
 				{
 					runUpdate=1;
 				}
 			}
+			
+			
+			//Update the state-space LQG when required.
 			if (runUpdate == 1)
 			{
 				/**************************************************************
@@ -1008,47 +781,52 @@ int main(int argc, char **argv)
 				{
 					TooN::Vector<TooN::Dynamic,double> tempInput(iX);
 					tempInput = TooN::makeVector(mavPosErr[0]);
-					tempOutputX = controlX.update(tempInput);
+					tempOutputX = controlX->update(tempInput);
 				}
 				{
 					TooN::Vector<TooN::Dynamic,double> tempInput(iY);
 					tempInput = TooN::makeVector(mavPosErr[1]);
-					tempOutputY = controlY.update(tempInput);
+					tempOutputY = controlY->update(tempInput);
 				}
 				{
 					TooN::Vector<TooN::Dynamic,double> tempInput(iZ);
+					//Possibly replace mavPosErr[2] with nedPosErr[2] to stop some coupling between axes.
 					tempInput = TooN::makeVector(mavPosErr[2]);
-					tempOutputZ = controlZ.update(tempInput);
+					tempOutputZ = controlZ->update(tempInput);
 				}
 				{
 					TooN::Vector<TooN::Dynamic,double> tempInput(iW);
 					tempInput = TooN::makeVector(nedYawErr);
-					tempOutputW = controlW.update(tempInput);
+					tempOutputW = controlW->update(tempInput);
 				}
 			
-				
-				//Fill in the control values to be sent to the MAV and send.
+			
+				//===================
+				//Create command
+				//===================
+				//Fill in the control values to be sent to the MAV.
 				geometry_msgs::Twist cmd_vel;
-				
 				cmd_vel.linear.x  = (-1.0)*tempOutputX[0];
-				cmd_vel.linear.y  = (1.0)*tempOutputY[0];					//Axis negated to make NED
-				cmd_vel.linear.z  = (1.0)*tempOutputZ[0];		    //Axis negated to make NED
-				cmd_vel.angular.z = (1.0)*tempOutputW[0];		//Axis negated to make NED
-				//This command doesn't issue a movement, but ensures the auto hover mode
-				//is never enabled.
+				cmd_vel.linear.y  = (1.0)*tempOutputY[0];
+				cmd_vel.linear.z  = (1.0)*tempOutputZ[0];
+				cmd_vel.angular.z = (1.0)*tempOutputW[0];
+				//Setting angular.x =1 ensures MAV never enters hover mode using the on-board controller.
 				cmd_vel.angular.x = 1;  
+				//Send to MAV
 				pub_cmd_vel.publish(cmd_vel);	
 			}
 		}
 
+		//Set the previous position storgae. This is used to check if the feedback is lost,
+		//hence no control update should be performed.
 		prevPos = viconPos;
+
 
 		/**************************************************************
 		//CHECK STATUS' 
 		//end each loop by checking if the final waypoint has been reached, getting
 		//new input data and pausing to limit the control loop rate.
 		**************************************************************/
-		
 		//Check for new ros messages
 		ros::spinOnce();
 		rateLimiter.sleep();

@@ -200,7 +200,7 @@ bool waypoint_data::readWaypointData(void)
 	}
 	else
 	{
-		//If the file is not opened then use some default vakues
+		//If the file is not opened then use some default values
 		ROS_INFO("flyvslam:: Could not find waypoints.txt in current dir. Using default values.");
 		
 		//Default path is forwards and back 1m in the x axis at 1m altitude.
