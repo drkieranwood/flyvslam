@@ -21,6 +21,7 @@
 #include <flyvslam/vicon_data.h>
 #include <flyvslam/ptam_data.h>
 #include <flyvslam/lqg_control.h>
+#include <flyvslam/redord_lqg.h>
 #include <r_wrap_pi.h>
 #include <r_e_to_q.h>
 #include <r_apply_q.h>
@@ -60,6 +61,7 @@ int main(int argc, char **argv)
 	int manualPtamInit_on = 0;
 	int lqgControl_on = 1;
 	int waypointPlayback_on = 0;
+	int vision_on = 1;
 	
 	
 	//Create objects to store and handle vicon, ptam, and waypoint data.
@@ -105,13 +107,47 @@ int main(int argc, char **argv)
 	int oW = controlW->getNumOutputs();
 	
 	
+	//Create a set of reduced order LQG controllers
+	ROS_INFO("flyvslam::Read control gains X");
+	redord_lqg * redordX = loadRedordLQG("../controlgains/redordX");
+	ROS_INFO("flyvslam::Read control gains Y");
+	redord_lqg * redordY = loadRedordLQG("../controlgains/redordX");
+	ROS_INFO("flyvslam::Read control gains Z");
+	redord_lqg * redordZ = loadRedordLQG("../controlgains/redordZ");
+	ROS_INFO("flyvslam::Read control gains W");
+	redord_lqg * redordW = loadRedordLQG("../controlgains/redordW");
+	//If any controllers failed then do not take-off
+	if ((redordX==NULL) || (redordY==NULL) || (redordZ==NULL) || (redordW==NULL))
+	{
+		landingNow=1;
+	}
+	redordX->setMaxCtrl(0.37);
+	redordX->setMinCtrl(-0.37);
+	redordY->setMaxCtrl(0.37);
+	redordY->setMinCtrl(-0.37);
+	redordZ->setMaxCtrl(1.0);
+	redordZ->setMinCtrl(-1.0);
+	redordW->setMaxCtrl(1.0);
+	redordW->setMinCtrl(-1.0);
+
+	int iXr = redordX->getNumInputs();
+	int iYr = redordY->getNumInputs();
+	int iZr = redordZ->getNumInputs();
+	int iWr = redordW->getNumInputs();
+	int oXr = redordX->getNumOutputs();
+	int oYr = redordY->getNumOutputs();
+	int oZr = redordZ->getNumOutputs();
+	int oWr = redordW->getNumOutputs();
+
+
 			/*
 			//Test it worked
 			std::cout << "START TEST" << std::endl;
-			TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempA = ctrlX->getA();
+			TooN::Matrix<TooN::Dynamic,TooN::Dynamic,double> tempA = redordX->getAd();
 			std::cout << tempA(0,0) << " " << tempA(0,1) << " " << tempA(0,2) << std::endl;
 			std::cout << "END TEST" << std::endl;
 			* */
+			
 	
 	
 	//Some helpful variables. These just extract and store a direct copy of data available in 
@@ -153,7 +189,7 @@ int main(int argc, char **argv)
 	ros::Subscriber sub_vicon_pose = n.subscribe("/vicon/Archie/Archie", 1, &vicon_data::update,&vicon_info);
 	
 	//AR.Drone output command (needs the ardrone_autonomy node running to actually send the command to the MAV).
-	ros::Publisher  pub_cmd_vel = n.advertise<geometry_msgs::Twist>("/cmd_vel", 1);
+	ros::Publisher  pub_cmd_vel = n.advertise<geometry_msgs::Twist>("/cmd_vel_del", 1);
 
 	//Setup a publisher to control takeoff and landing.
 	ros::Publisher  pub_takeoff = n.advertise<std_msgs::Empty>("/ardrone/takeoff",1);
@@ -196,7 +232,7 @@ int main(int argc, char **argv)
 	double waypointPlaybackYaw[1000];
 	ros::Time waypointPlaybackTime[1000];
 	
-	double waypointPlaybackTimeDiff = 4.0;					//Playback time between waypoints. This is the speed of motion.
+	double waypointPlaybackTimeDiff = 3.0;					//Playback time between waypoints. This is the speed of motion.
 	ros::Time waypointPlaybackChangeTime;					//Time when last waypoint was changed.
 
 	int waypointCount = 0;									//Total waypoints collected
@@ -215,6 +251,7 @@ int main(int argc, char **argv)
 	ros::Rate rateLimiter(100);
 	int ctrlCount    = 0;
 	int ctrlCountMax = 10;
+	//Set to 10 for 10Hz, 5 for 20Hz, 20 for 5Hz etc...
 	
 
 	//Send the take-off command after a 2 second delay. To allow all ROS init. processes to complete.
@@ -421,114 +458,116 @@ int main(int argc, char **argv)
 		//1) move to set a baseline for PTAM
 		//2) move to find a scale for PTAM
 		**************************************************************/
-		//If at the third waypoint (idx==2) then start the PTAM baseline process.
-		if((waypoint_info.currentIdx==2) && (ptamInit==0))
+		if (vision_on)
 		{
-			ROS_INFO("flyvslam::PTAM Baseline start");
-			std_msgs::String initCmd;
- 			initCmd.data = "Space";
-			pub_ptaminit.publish(initCmd);
-			ptamInit = 1;
-		}
-		//If at the fith waypoint (idx==4) then stop the PTAM baseline process.
-		if((waypoint_info.currentIdx==4) && (ptamInit==1))
-		{
-			ROS_INFO("flyvslam::PTAM Baseline stop");
-			std_msgs::String initCmd;
- 			initCmd.data = "Space";
-			pub_ptaminit.publish(initCmd);
-			
-			//Set the initial Vicon pose for the PTAM to NED transformation.
-			ptam_info.setInitVicon(vicon_info.currentPos,vicon_info.currentRot);
-			
-			if (manualPtamInit_on==1)
+			//If at the third waypoint (idx==2) then start the PTAM baseline process.
+			if((waypoint_info.currentIdx==2) && (ptamInit==0))
 			{
-				//Set a manual pose correction. The orientation correction is set to do nothing at the moment. 
-				//Hence the orientation output will be in the camera frame.
-				//This overwrites the one set by the setinitVicon() above.
-				TooN::Vector<3,double> initPosTemp = TooN::makeVector(1.0,-0.195,-1.0);
-				TooN::Vector<4,double> initRotTemp = TooN::makeVector(1.0,0.0,0.0,0.0);
-				ptam_info.setInitGround(initPosTemp,initRotTemp);
+				ROS_INFO("flyvslam::PTAM Baseline start");
+				std_msgs::String initCmd;
+				initCmd.data = "Space";
+				pub_ptaminit.publish(initCmd);
+				ptamInit = 1;
 			}
-			ptamInit = 2;
-		}	
-		//If at the sixth waypoint (idx==5) then start the scaling movement.
-		if((waypoint_info.currentIdx==5) && (scaleInit==0))
-		{
-			ROS_INFO("flyvslam::PTAM Scale start");
-			ptamPos_one = ptamPos;
-			viconPos_one = viconPos;
-			scaleInit = 1;
-		}
-		//If at the eighth waypoint (idx==7) then stop the scaling movement.
-		if((waypoint_info.currentIdx==7) && (scaleInit==1))
-		{
-			ROS_INFO("flyvslam::PTAM Scale stop");
-			ptamPos_two = ptamPos;
-			viconPos_two = viconPos;
-			//Find magnitude of vectors from Vicon and PTAM, to calculate and set the scale for the PTAM to NED transformation.
-			double ptamDist  = TooN::norm(ptamPos_two - ptamPos_one);
-			double viconDist = TooN::norm(viconPos_two - viconPos_one);
-			
-			//If using the no Vicon averaging method overwrtie the scale 
-			//using the dead reckoning estimate.
-			if (manualPtamInit_on==1)
+			//If at the fith waypoint (idx==4) then stop the PTAM baseline process.
+			if((waypoint_info.currentIdx==4) && (ptamInit==1))
 			{
-				ptam_info.setPtamScale(double(1.0/ptamDist));
-			}
-			else
-			{
-				ptam_info.setPtamScale(double(viconDist/ptamDist));
-			}
-			scaleInit = 2;
-		}
-	    //If at the ninth waypoint (idx==8) then takeoff.
-	    //Only for the non-vicon initialisation.
-		if((waypoint_info.currentIdx==8) && (takeOffInit==0))
-		{
-			//If using the averaging method then this is the time to takeoff.
-			if (manualPtamInit_on==1)
-			{
-				ROS_INFO("flyvslam::TAKEOFF");
-				{
-					std_msgs::Empty tempMsg;
-					pub_takeoff.publish(tempMsg);
-				}
-			}
-			takeOffInit = 1;
-		}
-
-	
-		//Once the ptam init has been completed create an
-		//average roll and pitch output of PTAM. Turn this into a 
-		//quaternion and send to the ptam correction.
-		if (ptamInit==2 && avgCount<51 && (manualPtamInit_on==1))
-		{
-			//Only perform if PTAM has output a new measurement.
-			if ( ptamCheckPos != ptamPos)
-			{
-				//Extract the roll and pitch from ptam
-				double tmpRoll  = ptam_info.currentEuler[0];
-				double tmpPitch = ptam_info.currentEuler[1];
+				ROS_INFO("flyvslam::PTAM Baseline stop");
+				std_msgs::String initCmd;
+				initCmd.data = "Space";
+				pub_ptaminit.publish(initCmd);
 				
-				avgRoll   = ((avgRoll*avgCount)  + tmpRoll) /(avgCount+1.0);
-				avgPitch  = ((avgPitch*avgCount) + tmpPitch)/(avgCount+1.0);
-				avgCount = avgCount + 1;
-				ROS_INFO("flyvslam::avgRoll=%6.5f, avgPitch:%6.5f",avgRoll,avgPitch);
-
-				if (avgCount == 50)
+				//Set the initial Vicon pose for the PTAM to NED transformation.
+				ptam_info.setInitVicon(vicon_info.currentPos,vicon_info.currentRot);
+				
+				if (manualPtamInit_on==1)
 				{
-					TooN::Vector<3,double> tempEuler = TooN::makeVector( avgRoll,avgPitch,-1.5708 );
-					TooN::Vector<4,double> tempQuat = krot::r_e_to_q( tempEuler );
-					//Only set the correction after the average has been created.
-					ROS_INFO("flyvslam::initAvgRot: %4.2f,%4.2f,%4.2f,%4.2f",tempQuat[0],tempQuat[1],tempQuat[2],tempQuat[3]);
-					ptam_info.setGroundOrientation(tempQuat);
+					//Set a manual pose correction. The orientation correction is set to do nothing at the moment. 
+					//Hence the orientation output will be in the camera frame.
+					//This overwrites the one set by the setinitVicon() above.
+					TooN::Vector<3,double> initPosTemp = TooN::makeVector(1.0,-0.195,-1.0);
+					TooN::Vector<4,double> initRotTemp = TooN::makeVector(1.0,0.0,0.0,0.0);
+					ptam_info.setInitGround(initPosTemp,initRotTemp);
 				}
-								
-				ptamCheckPos = ptamPos;
+				ptamInit = 2;
+			}	
+			//If at the sixth waypoint (idx==5) then start the scaling movement.
+			if((waypoint_info.currentIdx==5) && (scaleInit==0))
+			{
+				ROS_INFO("flyvslam::PTAM Scale start");
+				ptamPos_one = ptamPos;
+				viconPos_one = viconPos;
+				scaleInit = 1;
+			}
+			//If at the eighth waypoint (idx==7) then stop the scaling movement.
+			if((waypoint_info.currentIdx==7) && (scaleInit==1))
+			{
+				ROS_INFO("flyvslam::PTAM Scale stop");
+				ptamPos_two = ptamPos;
+				viconPos_two = viconPos;
+				//Find magnitude of vectors from Vicon and PTAM, to calculate and set the scale for the PTAM to NED transformation.
+				double ptamDist  = TooN::norm(ptamPos_two - ptamPos_one);
+				double viconDist = TooN::norm(viconPos_two - viconPos_one);
+				
+				//If using the no Vicon averaging method overwrtie the scale 
+				//using the dead reckoning estimate.
+				if (manualPtamInit_on==1)
+				{
+					ptam_info.setPtamScale(double(1.0/ptamDist));
+				}
+				else
+				{
+					ptam_info.setPtamScale(double(viconDist/ptamDist));
+				}
+				scaleInit = 2;
+			}
+			//If at the ninth waypoint (idx==8) then takeoff.
+			//Only for the non-vicon initialisation.
+			if((waypoint_info.currentIdx==8) && (takeOffInit==0))
+			{
+				//If using the averaging method then this is the time to takeoff.
+				if (manualPtamInit_on==1)
+				{
+					ROS_INFO("flyvslam::TAKEOFF");
+					{
+						std_msgs::Empty tempMsg;
+						pub_takeoff.publish(tempMsg);
+					}
+				}
+				takeOffInit = 1;
+			}
+
+		
+			//Once the ptam init has been completed create an
+			//average roll and pitch output of PTAM. Turn this into a 
+			//quaternion and send to the ptam correction.
+			if (ptamInit==2 && avgCount<51 && (manualPtamInit_on==1))
+			{
+				//Only perform if PTAM has output a new measurement.
+				if ( ptamCheckPos != ptamPos)
+				{
+					//Extract the roll and pitch from ptam
+					double tmpRoll  = ptam_info.currentEuler[0];
+					double tmpPitch = ptam_info.currentEuler[1];
+					
+					avgRoll   = ((avgRoll*avgCount)  + tmpRoll) /(avgCount+1.0);
+					avgPitch  = ((avgPitch*avgCount) + tmpPitch)/(avgCount+1.0);
+					avgCount = avgCount + 1;
+					ROS_INFO("flyvslam::avgRoll=%6.5f, avgPitch:%6.5f",avgRoll,avgPitch);
+
+					if (avgCount == 50)
+					{
+						TooN::Vector<3,double> tempEuler = TooN::makeVector( avgRoll,avgPitch,-1.5708 );
+						TooN::Vector<4,double> tempQuat = krot::r_e_to_q( tempEuler );
+						//Only set the correction after the average has been created.
+						ROS_INFO("flyvslam::initAvgRot: %4.2f,%4.2f,%4.2f,%4.2f",tempQuat[0],tempQuat[1],tempQuat[2],tempQuat[3]);
+						ptam_info.setGroundOrientation(tempQuat);
+					}
+									
+					ptamCheckPos = ptamPos;
+				}
 			}
 		}
-		
 		
 		/**************************************************************
 		//CONTROL SELECTION
@@ -615,7 +654,7 @@ int main(int argc, char **argv)
 			double norm_mag = std::max( -1.0 , std::min( 1.0 ,propGainXY*errMag -diffGainXY*(viconVel*errNorm) ) );
 			double tang_mag = std::max( -1.0 , std::min( 1.0 ,                  -diffGainXY*(viconVel*errTang) ) );
 			TooN::Vector<3, double> tmp_vel = errNorm*norm_mag + errTang*tang_mag;
-		
+
 			// Limit tmp_vel magnitude to 1
 			if(TooN::norm(tmp_vel) > 1.0)
 			{
@@ -752,7 +791,7 @@ int main(int argc, char **argv)
 			if (runUpdate == 1)
 			{
 				/**************************************************************
-				//LQG/H2 Control
+				//LQG/H2 Control Version 1 - full auto-coded output from Matlab
 				//this uses the LQG/H2 optimal controller as a set of state-space 
 				//matrices which are updated once per-loop.
 				**************************************************************/
@@ -791,7 +830,7 @@ int main(int argc, char **argv)
 				{
 					TooN::Vector<TooN::Dynamic,double> tempInput(iZ);
 					//Possibly replace mavPosErr[2] with nedPosErr[2] to stop some coupling between axes.
-					tempInput = TooN::makeVector(mavPosErr[2]);
+					tempInput = TooN::makeVector(nedPosErr[2]);
 					tempOutputZ = controlZ->update(tempInput);
 				}
 				{
@@ -801,6 +840,7 @@ int main(int argc, char **argv)
 				}
 			
 			
+			/*
 				//===================
 				//Create command
 				//===================
@@ -810,6 +850,95 @@ int main(int argc, char **argv)
 				cmd_vel.linear.y  = (1.0)*tempOutputY[0];
 				cmd_vel.linear.z  = (1.0)*tempOutputZ[0];
 				cmd_vel.angular.z = (1.0)*tempOutputW[0];
+				//Setting angular.x =1 ensures MAV never enters hover mode using the on-board controller.
+				cmd_vel.angular.x = 1;  
+				//Send to MAV
+				pub_cmd_vel.publish(cmd_vel);	
+			*/
+			
+			
+			
+
+				/**************************************************************
+				//LQG/H2 Control Version 2 - reduced-order manual implementation
+				//this uses the LQG/H2 optimal controller as a set of state-space 
+				//matrices which are updated once per-loop.
+				**************************************************************/
+				//Find current BF position
+				TooN::Vector<3,double> nedPos = krot::r_apply_q(viconPos,viconRot);
+				
+				//Find current BF demand
+				TooN::Vector<3,double> nedRef = krot::r_apply_q(referencePos,viconRot);
+				
+				//The Y (2nd) element of these two vectors should be sent to the controller .
+				//as current position and desired position.
+				
+			
+				//Extract the x desired position into an augmented vector.
+				//This is set to always be zero. (i.e. the controller works to make 
+				//zero body frame error at all times for all states)
+				int tempSize =0;
+				tempSize = (redordX->getNumStates()) + (redordX->getNumDel()) + 1;
+				TooN::Vector<TooN::Dynamic,double> augDesX(tempSize);
+				augDesX = TooN::Zeros;
+				tempSize = (redordY->getNumStates()) + (redordY->getNumDel()) + 1;
+				TooN::Vector<TooN::Dynamic,double> augDesY(tempSize);
+				augDesY = TooN::Zeros;
+				tempSize = (redordZ->getNumStates()) + (redordZ->getNumDel()) + 1;
+				TooN::Vector<TooN::Dynamic,double> augDesZ(tempSize);
+				augDesZ = TooN::Zeros;
+				tempSize = (redordW->getNumStates()) + (redordW->getNumDel()) + 1;
+				TooN::Vector<TooN::Dynamic,double> augDesW(tempSize);
+				augDesW = TooN::Zeros;
+				
+				//Change the 3rd value of Y to be the desired set point
+				//augDesY[3] = nedRef[1];
+				
+				
+				//===================
+				//Update the controllers.
+				//===================
+				
+				TooN::Vector<TooN::Dynamic,double> tempOutputXt(oXr);
+				TooN::Vector<TooN::Dynamic,double> tempOutputYt(oYr);
+				TooN::Vector<TooN::Dynamic,double> tempOutputZt(oZr);
+				TooN::Vector<TooN::Dynamic,double> tempOutputWt(oWr);
+				
+				{
+					TooN::Vector<TooN::Dynamic,double> tempInput(iXr);
+					tempInput = TooN::makeVector(mavPosErr[0]);
+					tempOutputXt = redordX->update(tempInput,augDesX);
+				}
+				
+				{
+					TooN::Vector<TooN::Dynamic,double> tempInput(iYr);
+					//This uses the actual position expressed in the BF. Not the error.
+					tempInput = TooN::makeVector(mavPosErr[1]);
+					tempOutputYt = redordY->update(tempInput,augDesY);
+				}
+				{
+					TooN::Vector<TooN::Dynamic,double> tempInput(iZr);
+					//Possibly replace mavPosErr[2] with nedPosErr[2] to stop some coupling between axes.
+					tempInput = TooN::makeVector(nedPosErr[2]);
+					tempOutputZt = redordZ->update(tempInput,augDesZ);
+				}
+				{
+					TooN::Vector<TooN::Dynamic,double> tempInput(iWr);
+					tempInput = TooN::makeVector(nedYawErr);
+					tempOutputWt = redordW->update(tempInput,augDesW);
+				}
+				
+			
+			
+				//===================
+				//Create command
+				//===================
+				//Fill in the control values to be sent to the MAV.
+				geometry_msgs::Twist cmd_vel;
+				cmd_vel.linear.x  = (-1.0)*tempOutputXt[0];
+				cmd_vel.linear.y  = (1.0)*tempOutputYt[0];
+				cmd_vel.linear.z  = (1.0)*tempOutputZt[0];
+				cmd_vel.angular.z = (1.0)*tempOutputWt[0];
 				//Setting angular.x =1 ensures MAV never enters hover mode using the on-board controller.
 				cmd_vel.angular.x = 1;  
 				//Send to MAV

@@ -1,0 +1,42 @@
+#This is the waypoints file
+#The order is pos(x y z) look(x y z) time
+#--pos(xyz) is the position the MAV should be
+#--look(xyz) is the point the MAV should look at
+#--time is the time it should take to get to the next waypoint
+#--ideally always start with zeros and spaces are allowed
+
+#Takeoff and stabilise at altitude 
+#(25s is enough time to get from most places in the arena)
+0.0 0.0 0.0         0.0 -1000.0 0.0         5.0
+0.0 0.0 -1.0        0.0 -1000.0 0.0         20.0
+
+#Start ptam init. and move
+0.0 0.0 -1.0        0.0 -1000.0 0.0         10.0
+
+#Stabilise at +0.5m offset and stop ptam init.
+0.5 0.0 -1.0        0.0 -1000.0 0.0         5.0
+0.5 0.0 -1.0        0.0 -1000.0 0.0         5.0
+
+#Grab position for scaling and move back
+0.5 0.0 -1.0        0.0 -1000.0 0.0         10.0
+-1.5 0.0 -1.0        0.0 -1000.0 0.0         5.0
+
+#Grab position for scaling
+-1.5 0.0 -1.0        0.0 -1000.0 0.0         10.0
+
+#Move back to orgin slowly
+0.0 0.0 -1.0        0.0 -1000.0 0.0         20.0
+
+#Fly around the masking tape square
+0.0  0.0 -1.0        0.0 -1000.0 0.0         5.0
+0.0 -1.5 -1.0        0.0 -1000.0 0.0         5.0
+2.5 -1.5 -1.0        0.0 -1000.0 0.0         5.0
+2.5  5.0 -1.0        0.0 -1000.0 0.0         5.0
+-2.5  5.0 -1.0        0.0 -1000.0 0.0         5.0
+-2.5 -1.5 -1.0        0.0 -1000.0 0.0         5.0
+-0.0 -1.5 -1.0        0.0 -1000.0 0.0         5.0
+-0.0 -0.0 -1.0        0.0 -1000.0 0.0         10.0
+
+#Land over 10s to an altitude of 0.2m.
+0.0 -0.0 -1.0         0.0 -1000.0 0.0         10.0
+0.0 -0.0 -0.2         0.0 -1000.0 0.0         5.0

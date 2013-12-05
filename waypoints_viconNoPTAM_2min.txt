@@ -1,0 +1,20 @@
+#This is the waypoints file
+#The order is pos(x y z) look(x y z) time
+#--pos(xyz) is the position the MAV should be
+#--look(xyz) is the point the MAV should look at
+#--time is the time it should take to get to the next waypoint
+#--ideally always start with zeros and spaces are allowed
+
+#Takeoff and stabilise at altitude 
+#(25s is enough time to get from most places in the arena)
+0.0 -0.0 0.0         0.0 -1000.0 0.0         5.0
+0.0 -0.0 -1.0        0.0 -1000.0 0.0         20.0
+
+#2 Minute hover before landing. If the control is poor it will
+#be excited by the take-off
+0.0 -0.0 -1.0        0.0 -1000.0 0.0         120.0
+
+
+#Land over 10s to an altitude of 0.2m.
+0.0 -0.0 -1.0         0.0 -1000.0 0.0         10.0
+0.0 -0.0 -0.2         0.0 -1000.0 0.0         5.0

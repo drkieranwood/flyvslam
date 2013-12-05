@@ -7,31 +7,41 @@
 
 #Takeoff and stabilise at altitude 
 #(15s is enough time to get from most places in the arena)
-0.0 -2.0 0.0         0.0 -1000.0 0.0         5.0
-0.0 -2.0 -1.0        0.0 -1000.0 0.0         10.0
+1.5 -4.0 0.0         0.0 -1000.0 0.0         5.0
+1.5 -4.0 -1.0        0.0 -1000.0 0.0         10.0
 
 #Start ptam init. and move
-0.0 -2.0 -1.0        0.0 -1000.0 0.0         10.0
+1.5 -4.0 -1.0        0.0 -1000.0 0.0         10.0
 
-#Stabilise at +1m offset and stop ptam init.
-1.0 -2.0 -1.0        0.0 -1000.0 0.0         5.0
-1.0 -2.0 -1.0        0.0 -1000.0 0.0         5.0
+#Stabilise at +0.5m offset and stop ptam init.
+2.0 -4.0 -1.0        0.0 -1000.0 0.0         5.0
+2.0 -4.0 -1.0        0.0 -1000.0 0.0         2.0
 
 #Grab position for scaling and move back
-1.0 -2.0 -1.0        0.0 -1000.0 0.0         10.0
-0.0 -2.0 -1.0        0.0 -1000.0 0.0         5.0
+2.0 -4.0 -1.0        0.0 -1000.0 0.0         10.0
+1.0 -4.0 -1.0        0.0 -1000.0 0.0         2.0
 
 #Grab position for scaling
-0.0 -2.0 -1.0        0.0 -1000.0 0.0         5.0
+1.0 -4.0 -1.0        0.0 -1000.0 0.0         2.0
 
+#Move back to orgin slowly
+1.0 -4.0 -1.0        0.0 -1000.0 0.0         1.0
 
-#At this point all initialisation has been completed, 
-#and a route of waypoints can be specified. In this
-#case a long hover at 0,0,-1 is demanded so that the 
-#keyboard input can be used to set the ref.
-0.0 -2.0 -1.0        0.0 -1000.0 0.0         600.0
+#Time to move while adding to map
+#======================
+1.0 -4.0 -1.0        0.0 -1000.0 0.0         1.0
+
+#Time to wait to let map optimise
+-4.0  -4.0 -1.0        0.0 -1000.0 0.0       15.0
+
+#Time to move back over map
+#======================
+-4.0  -4.0 -1.0        0.0 -1000.0 0.0       1.0
+
+#Time to pause before landing
+1.0  -4.0 -1.0        0.0 -1000.0 0.0        10.0
 
 
 #Land over 10s to an altitude of 0.2m.
-0.0 -2.0 -1.0         0.0 -1000.0 0.0         10.0
-0.0 -2.0 -0.2         0.0 -1000.0 0.0         5.0
+1.0 -4.0 -1.0         0.0 -1000.0 0.0         4.0
+1.0 -4.0 -0.3         0.0 -1000.0 0.0         2.0
