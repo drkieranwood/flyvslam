@@ -109,7 +109,7 @@ int main(int argc, char **argv)
 	
 	//Create a set of reduced order LQG controllers
 	ROS_INFO("flyvslam::Read control gains X");
-	redord_lqg * redordX = loadRedordLQG("../controlgains/redordX");
+	redord_lqg * redordX = loadRedordLQG("../controlgains/redordY");
 	ROS_INFO("flyvslam::Read control gains Y");
 	redord_lqg * redordY = loadRedordLQG("../controlgains/redordX");
 	ROS_INFO("flyvslam::Read control gains Z");
